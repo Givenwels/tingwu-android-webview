@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">通义听悟</string>
+    <string name="web_content_description">通义听悟网页内容</string>
+    <string name="load_error_title">暂时无法打开</string>
+    <string name="load_error_message">请检查网络连接后重试。如果登录页面不支持内置浏览器，也可以使用系统浏览器继续。</string>
+    <string name="retry">重新加载</string>
+    <string name="open_in_browser">使用浏览器打开</string>
+    <string name="error_icon">!</string>
+    <string name="choose_file">选择文件或拍摄</string>
+    <string name="no_app_for_action">没有找到可以完成此操作的应用</string>
+    <string name="file_picker_unavailable">无法打开文件选择器</string>
+    <string name="download_started">下载已开始</string>
+    <string name="download_failed">无法开始下载</string>
+    <string name="permission_denied">未获得网页所需的相机或麦克风权限</string>
+</resources>

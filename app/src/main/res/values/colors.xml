@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_blue">#3B5CCC</color>
+    <color name="page_background">#EEF2F8</color>
+    <color name="text_primary">#172036</color>
+    <color name="text_secondary">#68738A</color>
+    <color name="button_text">#F8FAFF</color>
+    <color name="secondary_button_background">#DDE5F5</color>
+</resources>

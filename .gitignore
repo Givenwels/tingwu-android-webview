@@ -1,0 +1,12 @@
+.android-sdk/
+.gradle/
+.gradle-dist/
+.gradle-user-home/
+.kotlin/
+.sdk-extract/
+.android-sdk-commandlinetools.zip
+.gradle-*-bin.zip
+local.properties
+**/build/
+output/
+captures/
