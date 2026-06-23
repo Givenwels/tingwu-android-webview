@@ -29,11 +29,13 @@ https://tingwu.aliyun.com/
 
 可在仓库的 [Releases](https://github.com/Givenwels/tingwu-android-webview/releases) 页面下载 APK。
 
-首次公开版本提供 debug 签名 APK，适合个人侧载和功能验证。请阅读下面的安装与安全说明。
+当前 Release 提供 debug 签名 APK，适合个人侧载和功能验证。请阅读下面的安装与安全说明。
 
 ## 已支持
 
 - 通义听悟和阿里登录页面在 WebView 内继续打开。
+- 默认使用桌面 Chrome 浏览器标识和桌面视口，以兼容官网仅向 PC 开放的“实时记录”入口。
+- 锁屏或普通切后台时不主动暂停 WebView，尽可能保持正在播放的网页音频。
 - Cookie、第三方 Cookie、JavaScript 和 DOM Storage。
 - Android 返回键优先返回网页历史。
 - 网页文件单选、多选和 MIME 类型过滤。
@@ -183,6 +185,24 @@ Manifest 只声明：
 - 检查相机权限是否被拒绝。
 - 尝试选择本地文件而不是拍摄。
 - 确认 Android System WebView 已更新。
+
+### “实时记录”仍然提示需要 PC 端
+
+- 安装 1.0.1 或更高版本。
+- 更新 Android System WebView 或 Chrome，然后彻底退出并重新打开 App。
+- 如果旧页面仍被缓存，可在 Android 设置中清除本 App 的存储后重新登录。
+
+本 App 通过桌面浏览器标识加载官网 PC 页面，但功能是否最终可用仍由通义听悟官网、账号权限和当前网页版本决定。
+
+### 锁屏后音频停止
+
+1.0.1 起，锁屏和普通切后台不会再触发 WebView 的主动暂停。若特定手机仍会停止：
+
+- 在系统电池设置中将本 App 设为“不限制”或允许后台活动。
+- 关闭省电模式后重试。
+- 更新 Android System WebView 或 Chrome。
+
+不同厂商对后台网页、音频和麦克风的限制不同；实时录音在长时间锁屏时仍可能受到 Android 或厂商系统策略影响。
 
 ### 无法下载
 

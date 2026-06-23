@@ -88,8 +88,9 @@ class MainActivity : AppCompatActivity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
+            userAgentString = WebViewCompatibility.desktopUserAgent(userAgentString)
             useWideViewPort = true
-            loadWithOverviewMode = false
+            loadWithOverviewMode = true
             builtInZoomControls = true
             displayZoomControls = false
             setSupportMultipleWindows(true)
@@ -482,7 +483,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
-        binding.webView.onPause()
+        if (WebViewCompatibility.shouldPauseWebView(isFinishing)) {
+            binding.webView.onPause()
+        }
         CookieManager.getInstance().flush()
         super.onPause()
     }
@@ -497,6 +500,7 @@ class MainActivity : AppCompatActivity() {
         pendingWebPermission?.deny()
         pendingWebPermission = null
         binding.webView.apply {
+            onPause()
             stopLoading()
             loadUrl("about:blank")
             webChromeClient = WebChromeClient()
