@@ -17,4 +17,9 @@
     <string name="mobile_mode">手机模式</string>
     <string name="desktop_compatibility_enabled">已切换到 PC 兼容模式</string>
     <string name="mobile_mode_enabled">已切换到手机模式</string>
+    <string name="background_playback_channel_name">后台播放</string>
+    <string name="background_playback_channel_description">用于锁屏或切后台时尽量保持网页音频继续播放</string>
+    <string name="background_playback_title">通义听悟正在后台运行</string>
+    <string name="background_playback_message">用于锁屏后继续播放网页音频</string>
+    <string name="background_playback_stop">停止</string>
 </resources>

@@ -526,6 +526,11 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         if (WebViewCompatibility.shouldPauseWebView(isFinishing)) {
             binding.webView.onPause()
+        } else if (BackgroundPlaybackPolicy.shouldStartKeepAlive(isFinishing)) {
+            BackgroundPlaybackService.start(
+                context = this,
+                includeMicrophone = hasRecordAudioPermission(),
+            )
         }
         CookieManager.getInstance().flush()
         super.onPause()
@@ -533,10 +538,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        BackgroundPlaybackService.stop(this)
         binding.webView.onResume()
     }
 
     override fun onDestroy() {
+        BackgroundPlaybackService.stop(this)
         cancelFileChooser()
         pendingWebPermission?.deny()
         pendingWebPermission = null
@@ -551,6 +558,10 @@ class MainActivity : AppCompatActivity() {
         }
         super.onDestroy()
     }
+
+    private fun hasRecordAudioPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     private inner class TingwuWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(
