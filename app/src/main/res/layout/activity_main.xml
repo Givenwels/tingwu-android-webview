@@ -20,6 +20,25 @@
         android:progressTint="@color/brand_blue"
         android:visibility="gone" />
 
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/display_mode_button"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/display_mode_toggle_background"
+        android:elevation="8dp"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:text="@string/desktop_compatibility_mode"
+        android:textAllCaps="false"
+        android:textColor="@color/button_text"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
     <LinearLayout
         android:id="@+id/error_panel"
         android:layout_width="match_parent"

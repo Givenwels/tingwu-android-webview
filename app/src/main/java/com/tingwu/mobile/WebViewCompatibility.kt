@@ -3,6 +3,30 @@ package com.tingwu.mobile
 object WebViewCompatibility {
     private val chromiumVersionPattern = Regex("""Chrome/[\d.]+""")
 
+    data class DisplaySettings(
+        val userAgent: String,
+        val useWideViewPort: Boolean,
+        val loadWithOverviewMode: Boolean,
+    )
+
+    fun displaySettings(
+        defaultUserAgent: String,
+        desktopCompatibilityEnabled: Boolean,
+    ): DisplaySettings =
+        if (desktopCompatibilityEnabled) {
+            DisplaySettings(
+                userAgent = desktopUserAgent(defaultUserAgent),
+                useWideViewPort = true,
+                loadWithOverviewMode = true,
+            )
+        } else {
+            DisplaySettings(
+                userAgent = defaultUserAgent,
+                useWideViewPort = false,
+                loadWithOverviewMode = false,
+            )
+        }
+
     fun desktopUserAgent(defaultUserAgent: String): String {
         val chromiumVersion =
             chromiumVersionPattern.find(defaultUserAgent)?.value

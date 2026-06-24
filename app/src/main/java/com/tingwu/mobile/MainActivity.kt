@@ -48,6 +48,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingWebResources: Array<String> = emptyArray()
 
     private var mainFrameError = false
+    private lateinit var mobileUserAgent: String
+    private var desktopCompatibilityEnabled = false
 
     private val filePickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -83,14 +85,12 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+        mobileUserAgent = binding.webView.settings.userAgentString
 
         with(binding.webView.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
-            userAgentString = WebViewCompatibility.desktopUserAgent(userAgentString)
-            useWideViewPort = true
-            loadWithOverviewMode = true
             builtInZoomControls = true
             displayZoomControls = false
             setSupportMultipleWindows(true)
@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
             safeBrowsingEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
         }
+        applyDisplayMode(reload = false)
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -124,6 +125,46 @@ class MainActivity : AppCompatActivity() {
         }
         binding.browserButton.setOnClickListener {
             openInSystemBrowser(binding.webView.url ?: BuildConfig.TINGWU_URL)
+        }
+        binding.displayModeButton.setOnClickListener {
+            desktopCompatibilityEnabled = !desktopCompatibilityEnabled
+            applyDisplayMode(reload = true)
+            val message =
+                if (desktopCompatibilityEnabled) {
+                    R.string.desktop_compatibility_enabled
+                } else {
+                    R.string.mobile_mode_enabled
+                }
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun applyDisplayMode(reload: Boolean) {
+        val displaySettings =
+            WebViewCompatibility.displaySettings(
+                defaultUserAgent = mobileUserAgent,
+                desktopCompatibilityEnabled = desktopCompatibilityEnabled,
+            )
+        with(binding.webView.settings) {
+            userAgentString = displaySettings.userAgent
+            useWideViewPort = displaySettings.useWideViewPort
+            loadWithOverviewMode = displaySettings.loadWithOverviewMode
+        }
+        binding.displayModeButton.setText(
+            if (desktopCompatibilityEnabled) {
+                R.string.mobile_mode
+            } else {
+                R.string.desktop_compatibility_mode
+            },
+        )
+        if (reload) {
+            val currentUrl =
+                binding.webView.url
+                    ?.takeIf(UrlPolicy::shouldStayInWebView)
+                    ?.takeIf { it != "about:blank" }
+                    ?: BuildConfig.TINGWU_URL
+            binding.webView.stopLoading()
+            binding.webView.loadUrl(currentUrl)
         }
     }
 

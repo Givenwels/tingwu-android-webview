@@ -13,4 +13,8 @@
     <string name="download_started">下载已开始</string>
     <string name="download_failed">无法开始下载</string>
     <string name="permission_denied">未获得网页所需的相机或麦克风权限</string>
+    <string name="desktop_compatibility_mode">PC兼容</string>
+    <string name="mobile_mode">手机模式</string>
+    <string name="desktop_compatibility_enabled">已切换到 PC 兼容模式</string>
+    <string name="mobile_mode_enabled">已切换到手机模式</string>
 </resources>
