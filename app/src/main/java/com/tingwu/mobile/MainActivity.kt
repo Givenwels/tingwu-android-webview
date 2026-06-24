@@ -538,7 +538,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        BackgroundPlaybackService.stop(this)
+        if (BackgroundPlaybackPolicy.shouldPrepareKeepAliveOnResume()) {
+            BackgroundPlaybackService.start(
+                context = this,
+                includeMicrophone = hasRecordAudioPermission(),
+            )
+        }
         binding.webView.onResume()
     }
 
@@ -586,6 +591,12 @@ class MainActivity : AppCompatActivity() {
         ) {
             if (!mainFrameError) {
                 binding.progressBar.visibility = View.GONE
+            }
+            if (UrlPolicy.isTrustedMediaOrigin(url)) {
+                view.evaluateJavascript(
+                    BackgroundPlaybackPolicy.pageVisibilityKeepAliveScript(),
+                    null,
+                )
             }
         }
 

@@ -12,6 +12,16 @@ class BackgroundPlaybackPolicyTest {
     }
 
     @Test
+    fun `activity resume prepares keep alive before screen lock happens`() {
+        assertTrue(BackgroundPlaybackPolicy.shouldPrepareKeepAliveOnResume())
+    }
+
+    @Test
+    fun `activity resume does not stop keep alive service`() {
+        assertFalse(BackgroundPlaybackPolicy.shouldStopKeepAliveOnResume())
+    }
+
+    @Test
     fun `finishing activity does not start keep alive service`() {
         assertFalse(BackgroundPlaybackPolicy.shouldStartKeepAlive(activityIsFinishing = true))
     }
@@ -36,5 +46,16 @@ class BackgroundPlaybackPolicyTest {
             BackgroundPlaybackPolicy.MICROPHONE_SERVICE_TYPE,
             mediaWithMicrophone and BackgroundPlaybackPolicy.MICROPHONE_SERVICE_TYPE,
         )
+    }
+
+    @Test
+    fun `page visibility keep alive script reports the page as visible`() {
+        val script = BackgroundPlaybackPolicy.pageVisibilityKeepAliveScript()
+
+        assertTrue(script.contains("visibilityState"))
+        assertTrue(script.contains("visible"))
+        assertTrue(script.contains("hidden"))
+        assertTrue(script.contains("hasFocus"))
+        assertTrue(script.contains("visibilitychange"))
     }
 }
