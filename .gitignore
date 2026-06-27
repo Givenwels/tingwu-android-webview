@@ -10,3 +10,11 @@ local.properties
 **/build/
 output/
 captures/
+
+pwa/node_modules/
+pwa/dist/
+pwa/.vite/
+pwa/.superpowers/
+pwa/coverage/
+pwa/*.local
+pwa/*.log
