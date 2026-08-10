@@ -50,6 +50,14 @@ jobs:
         working-directory: pwa
         run: npm run build
 
+      - name: Download latest Android APK from Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p pwa/dist
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir pwa/dist --clobber
+          ls -la pwa/dist/*.apk
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

@@ -99,10 +99,24 @@ PWA 版：
 
 ## 安装现成 APK
 
-已构建的安装包位于：
+APK 通过两种方式分发（任选其一）：
+
+**方式一：在线入口页（推荐，手机直接访问）**
+
+用手机浏览器打开：
 
 ```text
-output/通义听悟-debug.apk
+https://givenwels.github.io/tingwu-android-webview/
+```
+
+安卓手机会在启动页看到「下载安卓 App（APK）」按钮，点击即可下载。iPhone 用户按页面引导添加到主屏幕即可。
+
+**方式二：GitHub Release 页面**
+
+访问仓库的 [Releases 页面](https://github.com/Givenwels/tingwu-android-webview/releases)（或点击右侧「Releases」标签），下载最新版本的 `tingwu-vX.X.X-debug.apk`：
+
+```text
+https://github.com/Givenwels/tingwu-android-webview/releases/latest
 ```
 
 安装步骤：
@@ -122,7 +136,7 @@ debug APK 使用 Android 调试证书签名，适合个人安装和测试，不�
 
 ```powershell
 .\.android-sdk\platform-tools\adb.exe devices
-.\.android-sdk\platform-tools\adb.exe install -r ".\output\通义听悟-debug.apk"
+.\.android-sdk\platform-tools\adb.exe install -r ".\app\build\outputs\apk\debug\app-debug.apk"
 ```
 
 如果手机上已经安装了使用不同证书签名的同包名应用，需要先卸载旧版本。

@@ -38,6 +38,16 @@ export function isStandalone(snapshot: PlatformSnapshot): boolean {
   return snapshot.standalone || snapshot.displayModeStandalone
 }
 
+export function isAndroidLike(snapshot: PlatformSnapshot): boolean {
+  return /android/i.test(snapshot.userAgent) && !isIosLike(snapshot)
+}
+
+export function shouldShowAndroidApkDownload(
+  snapshot: PlatformSnapshot,
+): boolean {
+  return isAndroidLike(snapshot)
+}
+
 export function shouldShowIosInstallGuide(
   snapshot: PlatformSnapshot,
 ): boolean {

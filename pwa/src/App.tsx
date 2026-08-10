@@ -1,14 +1,21 @@
 import { useEffect } from 'react'
 import { APP_CONFIG, type AppConfig } from './config'
-import { getPlatformSnapshot, shouldShowIosInstallGuide } from './platform'
+import {
+  getPlatformSnapshot,
+  shouldShowAndroidApkDownload,
+  shouldShowIosInstallGuide,
+} from './platform'
 
 type AppProps = {
   config?: AppConfig
 }
 
 function App({ config = APP_CONFIG }: AppProps) {
-  const showIosInstallGuide = shouldShowIosInstallGuide(getPlatformSnapshot())
-  const shouldAutoRedirect = config.autoRedirect && !showIosInstallGuide
+  const platform = getPlatformSnapshot()
+  const showIosInstallGuide = shouldShowIosInstallGuide(platform)
+  const showAndroidApkDownload = shouldShowAndroidApkDownload(platform)
+  const shouldAutoRedirect =
+    config.autoRedirect && !showIosInstallGuide && !showAndroidApkDownload
 
   const goToTarget = () => {
     window.location.href = config.targetUrl
@@ -61,6 +68,28 @@ function App({ config = APP_CONFIG }: AppProps) {
           >
             进入{config.appName}
           </button>
+
+          {showAndroidApkDownload && (
+            <section
+              aria-label="Android APK 下载"
+              className="mt-7 rounded-[22px] border border-[#d8e0ef] bg-[#f3f6fc] px-4 py-4 text-left dark:border-[#2c3853] dark:bg-[#111a2b]"
+            >
+              <p className="text-[15px] font-bold text-[#26334d] dark:text-[#edf2ff]">
+                安卓手机安装 App
+              </p>
+              <p className="mt-2 text-[13px] leading-5 text-[#66728a] dark:text-[#aeb9cf]">
+                也可直接安装安卓 App（{config.androidApkVersion}，{config.androidApkSize}），
+                支持锁屏播放、上传等增强体验。
+              </p>
+              <a
+                href={config.androidApkUrl}
+                download
+                className="mt-3 flex min-h-12 w-full items-center justify-center rounded-[14px] bg-[#3b5ccc] px-4 py-2.5 text-[15px] font-bold text-[#f8faff] no-underline shadow-[0_8px_18px_rgba(59,92,204,0.18)] transition-[transform,background-color,box-shadow] duration-150 ease-out hover:bg-[#3453bb] active:scale-[0.985] dark:bg-[#6683e6] dark:text-[#10172a] dark:shadow-none dark:hover:bg-[#7590ee]"
+              >
+                下载安卓 App（APK）
+              </a>
+            </section>
+          )}
 
           {showIosInstallGuide && (
             <section

@@ -45,6 +45,15 @@ const mockDesktopBrowser = () => {
   setNavigatorValue('maxTouchPoints', 0)
 }
 
+const mockAndroidBrowser = () => {
+  setNavigatorValue(
+    'userAgent',
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+  )
+  setNavigatorValue('platform', 'Linux armv8l')
+  setNavigatorValue('maxTouchPoints', 5)
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -189,5 +198,47 @@ describe('App', () => {
     })
 
     expect(shouldShowGuide).toBe(true)
+  })
+
+  it('shows Android APK download and pauses automatic redirect on Android', () => {
+    vi.useFakeTimers()
+    mockAndroidBrowser()
+    const config = {
+      ...APP_CONFIG,
+      redirectDelay: 1000,
+      targetUrl: 'https://example.com/android',
+    }
+
+    render(<App config={config} />)
+
+    expect(screen.getByText('安卓手机安装 App')).toBeInTheDocument()
+    const downloadLink = screen.getByRole('link', {
+      name: /下载安卓 App/,
+    })
+    expect(downloadLink).toHaveAttribute('href', config.androidApkUrl)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
+    act(() => vi.advanceTimersByTime(config.redirectDelay * 2))
+    expect(window.location.href).not.toBe(config.targetUrl)
+  })
+
+  it('keeps automatic redirect on desktop browsers without APK download card', () => {
+    vi.useFakeTimers()
+    mockDesktopBrowser()
+    const config = {
+      ...APP_CONFIG,
+      redirectDelay: 1000,
+      targetUrl: 'https://example.com/desktop',
+    }
+
+    render(<App config={config} />)
+
+    expect(screen.queryByText('安卓手机安装 App')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      `正在进入${config.appName}...`,
+    )
+
+    act(() => vi.advanceTimersByTime(config.redirectDelay))
+    expect(window.location.href).toBe(config.targetUrl)
   })
 })
