@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{margin:0;background:#f7f7ff;color:#27264d;font:16px sans-serif}.topContainer{background:#eeeaff}.topBar{height:52px;display:flex;align-items:center;gap:12px}.back{width:48px;height:48px;border:0;background:transparent;font:inherit}.title{flex:1}.audioPlayer{padding:16px}button{min-height:48px;font:inherit}</style>
+</head><body><div class="topContainer"><div class="topBar"><button class="back" onclick="window.backClicked=true">返回</button><div class="title">本地播放测试</div></div></div>
+<div class="audioPlayer"><button id="play" onclick="player.play()">播放本地音频</button><span id="time"></span></div>
+<script src="/__tingwu_test__/official-mobile-audio.js"></script><script>
+window.backClicked=false;window.playbackConnected=false;
+window.addEventListener('message',event=>{if(event.data==='tingwu-media-playback')window.playbackConnected=true;});
+const audio=new OfficialInnerAudioContext();audio.src=location.origin+'/__tingwu_test__/audio.wav';
+window.player={innerAudioContext:audio,playing:false,$:{isUnmounted:false,isDeactivated:false},
+  play(){this.playing=true;this.innerAudioContext.play();},pause(){this.playing=false;this.innerAudioContext.pause();},
+  toggleRevive:window.officialToggleRevive};
+document.querySelector('.audioPlayer').__vueParentComponent={type:{name:'AudioPlayer'},proxy:window.player,parent:null};
+audio.onTimeUpdate(()=>{document.querySelector('#time').textContent=String(Math.floor(audio.currentTime));});
+document.addEventListener('visibilitychange',()=>player.toggleRevive(document.hidden?'pause':'play'));
+</script></body></html>

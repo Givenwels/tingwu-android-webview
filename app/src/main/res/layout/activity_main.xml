@@ -1,92 +1,178 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/page_background"
+    android:orientation="vertical">
 
-    <WebView
-        android:id="@+id/web_view"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@string/web_content_description" />
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-    <ProgressBar
-        android:id="@+id/progress_bar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="match_parent"
-        android:layout_height="3dp"
-        android:layout_gravity="top"
-        android:indeterminate="false"
-        android:max="100"
-        android:progressTint="@color/brand_blue"
-        android:visibility="gone" />
+        <WebView
+            android:id="@+id/web_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/web_content_description" />
+
+        <ProgressBar
+            android:id="@+id/progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="top"
+            android:indeterminate="false"
+            android:max="100"
+            android:progressTint="@color/brand_blue"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/error_panel"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/page_background"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/error_icon_background"
+                android:gravity="center"
+                android:minWidth="64dp"
+                android:minHeight="64dp"
+                android:text="@string/error_icon"
+                android:textColor="@color/brand_blue"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/load_error_title"
+                android:textColor="@color/text_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/error_message"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:maxWidth="320dp"
+                android:text="@string/load_error_message"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/retry_button"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="28dp"
+                android:backgroundTint="@color/brand_blue"
+                android:maxWidth="320dp"
+                android:text="@string/retry"
+                android:textAllCaps="false"
+                android:textColor="@color/button_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/browser_button"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="@color/secondary_button_background"
+                android:maxWidth="320dp"
+                android:text="@string/open_in_browser"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
     <LinearLayout
-        android:id="@+id/error_panel"
+        android:id="@+id/playback_mini_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/page_background"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="32dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/playback_capsule_background"
+        android:gravity="center_vertical"
+        android:minHeight="64dp"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="4dp"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/playback_open"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:background="@drawable/error_icon_background"
-            android:gravity="center"
-            android:minWidth="64dp"
-            android:minHeight="64dp"
-            android:text="@string/error_icon"
-            android:textColor="@color/brand_blue"
-            android:textSize="28sp"
-            android:textStyle="bold" />
+            android:layout_weight="1"
+            android:background="@drawable/playback_item_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="vertical"
+            android:paddingEnd="8dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/load_error_title"
-            android:textColor="@color/text_primary"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            <TextView
+                android:id="@+id/playback_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:importantForAccessibility="no"
+                android:maxLines="1"
+                android:textColor="@color/playback_ui_text"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/error_message"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center"
-            android:maxWidth="320dp"
-            android:text="@string/load_error_message"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+            <TextView
+                android:id="@+id/playback_position"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:breakStrategy="simple"
+                android:importantForAccessibility="no"
+                android:textColor="@color/playback_ui_text_secondary"
+                android:textDirection="ltr"
+                android:textSize="12sp" />
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/retry_button"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="28dp"
-            android:backgroundTint="@color/brand_blue"
-            android:maxWidth="320dp"
-            android:text="@string/retry"
-            android:textAllCaps="false"
-            android:textColor="@color/button_text"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+        </LinearLayout>
 
-        <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/browser_button"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="@color/secondary_button_background"
-            android:maxWidth="320dp"
-            android:text="@string/open_in_browser"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/playback_toggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/playback_toggle_background"
+            android:contentDescription="@string/playback_ui_play"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_playback_play" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/playback_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/playback_item_background"
+            android:contentDescription="@string/playback_ui_close"
+            android:padding="12dp"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_playback_close" />
 
     </LinearLayout>
 
-</FrameLayout>
+</LinearLayout>

@@ -13,6 +13,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Message
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
@@ -33,15 +34,17 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.tingwu.mobile.databinding.ActivityMainBinding
 import java.io.File
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), BackgroundPlaybackService.Controller {
     private lateinit var binding: ActivityMainBinding
 
     private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
@@ -54,6 +57,8 @@ class MainActivity : AppCompatActivity() {
     private var mainFrameError = false
     private var openingRecorder = false
     private var mediaPlaybackPort: WebMessagePort? = null
+    private lateinit var playbackMini: PlaybackMiniController
+    private var playbackInfo = PlaybackInfo()
     private val mediaPlaybackScript by lazy {
         assets.open("media-playback.js").bufferedReader().use { it.readText() }
     }
@@ -92,6 +97,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        PlaybackAppVisibility.install(application)
+        playbackMini = PlaybackMiniController(binding,
+            onToggle = { onPlaybackCommand(if (playbackInfo.playing || playbackInfo.status == "buffering") "pause" else "play") },
+            onOpen = { binding.webView.evaluateJavascript("window.scrollTo(0,0);", null) },
+            onClose = { onPlaybackCommand("stop") })
+        binding.playbackOpen.setOnLongClickListener { showOverlayPermissionPrompt(); true }
 
         configureWebView()
         configureActions()
@@ -172,10 +184,7 @@ class MainActivity : AppCompatActivity() {
     private fun openRecorder() {
         if (openingRecorder || isFinishing) return
         openingRecorder = true
-        binding.webView.evaluateJavascript(
-            "document.querySelectorAll('audio,video').forEach(media => media.pause());",
-            null,
-        )
+        onPlaybackCommand("stop")
         recordingLauncher.launch(Intent(this, RecordingActivity::class.java))
     }
 
@@ -190,6 +199,7 @@ class MainActivity : AppCompatActivity() {
                             binding.webView.reload()
                         }
                         binding.webView.canGoBack() -> binding.webView.goBack()
+                        playbackInfo.visible -> moveTaskToBack(true)
                         else -> {
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
@@ -562,6 +572,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.webView.onResume()
+        BackgroundPlaybackService.suppressOverlay(false)
+        renderPlayback()
         mediaPlaybackPort?.postMessage(WebMessage("query-state"))
     }
 
@@ -586,11 +598,70 @@ class MainActivity : AppCompatActivity() {
         mediaPlaybackPort?.close()
         mediaPlaybackPort = null
         BackgroundPlaybackService.stop(this)
+        playbackInfo = PlaybackInfo()
+        if (::playbackMini.isInitialized) renderPlayback()
+    }
+
+    override fun onPlaybackCommand(command: String) {
+        val channel = mediaPlaybackPort
+        if (channel == null || isDestroyed || isFinishing) {
+            BackgroundPlaybackService.stop(this)
+            return
+        }
+        channel.postMessage(WebMessage(command))
+    }
+
+    override fun onPlaybackUnavailable() {
+        if (isDestroyed || isFinishing) return
+        onPlaybackCommand("pause")
+        Toast.makeText(this, R.string.playback_unavailable, Toast.LENGTH_LONG).show()
+    }
+
+    private fun updatePlayback(data: String?) {
+        val info = PlaybackInfo.parse(data) ?: return
+        val starting = info.playing && !playbackInfo.playing
+        playbackInfo = info
+        BackgroundPlaybackService.update(this, this, info)
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            renderPlayback()
+            if (starting && !Settings.canDrawOverlays(this) &&
+                !getSharedPreferences("playback", MODE_PRIVATE).getBoolean("overlay_requested", false)
+            ) showOverlayPermissionPrompt()
+        }
+    }
+
+    private fun renderPlayback() = playbackMini.render(playbackInfo.visible,
+        playbackInfo.playing || playbackInfo.status == "buffering", playbackInfo.title,
+        playbackInfo.positionMs, playbackInfo.durationMs)
+
+    private fun showOverlayPermissionPrompt() {
+        if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val preferences = getSharedPreferences("playback", MODE_PRIVATE)
+        preferences.edit().putBoolean("overlay_requested", true).apply()
+        val allowed = Settings.canDrawOverlays(this)
+        AlertDialog.Builder(this).setTitle(R.string.playback_overlay_title)
+            .setMessage(R.string.playback_overlay_message)
+            .setNegativeButton(R.string.playback_overlay_later, null)
+            .setPositiveButton(if (allowed && preferences.getBoolean("overlay_enabled", true)) R.string.playback_overlay_disable
+                else if (allowed) R.string.playback_overlay_enable else R.string.playback_overlay_settings) { _, _ ->
+                if (allowed) {
+                    preferences.edit().putBoolean("overlay_enabled", !preferences.getBoolean("overlay_enabled", true)).apply()
+                } else {
+                    BackgroundPlaybackService.suppressOverlay(true)
+                    try {
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    } catch (_: RuntimeException) {
+                        BackgroundPlaybackService.suppressOverlay(false)
+                        Toast.makeText(this, R.string.playback_overlay_settings_unavailable, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.show()
     }
 
     private fun observeMediaPlayback(view: WebView, url: String) {
-        stopObservingMediaPlayback()
-        if (!UrlPolicy.isTrustedMediaOrigin(url)) return
+        mediaPlaybackPort?.close()
+        mediaPlaybackPort = null
+        if (!UrlPolicy.isTrustedMediaOrigin(url)) { stopObservingMediaPlayback(); return }
 
         val origin = Uri.parse(url).buildUpon().path("").clearQuery().fragment(null).build()
         val ports = view.createWebMessageChannel()
@@ -605,18 +676,19 @@ class MainActivity : AppCompatActivity() {
 
                     when (message.data) {
                         "open-recording" -> openRecorder()
-                        "playing" -> BackgroundPlaybackService.start(this@MainActivity)
-                        "stopped" -> BackgroundPlaybackService.stop(this@MainActivity)
+                        else -> updatePlayback(message.data)
                     }
                 }
             },
         )
         view.evaluateJavascript(mobilePageScript) {
-            if (mediaPlaybackPort === nativePort && view.url == url) {
+            val currentOrigin = Uri.parse(view.url.orEmpty()).buildUpon().path("").clearQuery().fragment(null).build()
+            if (mediaPlaybackPort === nativePort && currentOrigin == origin) {
                 view.postWebMessage(
                     WebMessage("tingwu-media-playback", arrayOf(ports[1])),
                     origin,
                 )
+                nativePort.postMessage(WebMessage("enable-controls"))
             } else {
                 ports[1].close()
             }

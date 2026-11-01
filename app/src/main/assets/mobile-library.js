@@ -8,6 +8,7 @@
   let nativeList = null;
   let panel = null;
   let scrollTop = 0;
+  let returnScrollTop = null;
   let tools = [];
   let active = false;
   let directoryStarted = false;
@@ -126,6 +127,7 @@
   const select = directory => {
     if (panel) panel.scrollTop = 0;
     scrollTop = 0;
+    returnScrollTop = null;
     selected = directory;
     keyword = '';
     records = [];
@@ -207,9 +209,21 @@
   const openRecord = record => {
     const id = record.transId || record.demoId;
     if (id === undefined || id === null || !String(id).trim()) return;
+    returnScrollTop = panel ? panel.scrollTop : 0;
+    // H5 leaves window.uni empty. Use its My card entry point, including page data and
+    // Uni router page IDs: changing the hash alone reuses Result's first record/player.
+    for (let component = nativeList && nativeList.__vueParentComponent; component; component = component.parent) {
+      const card = component.type && component.type.components && component.type.components.StaticItem;
+      const options = card && (card.__vccOpts || card);
+      if (options && options.methods && typeof options.methods.toResult === 'function') {
+        options.methods.toResult.call({ item: record, from: 'my', isContentBox: false },
+          Object.assign({}, record, { transId: encodeURIComponent(String(id)) }));
+        return;
+      }
+    }
     const url = '/pages/Meeting/Result?transId=' + encodeURIComponent(String(id));
     if (window.uni && typeof window.uni.navigateTo === 'function') window.uni.navigateTo({ url });
-    else location.hash = '#' + url;
+    else { returnScrollTop = null; recordError = '记录打开失败，请重试'; render(); }
   };
   function render() {
     if (!panel) return;
@@ -303,6 +317,7 @@
         content = null;
         nativeList = null;
         scrollTop = 0;
+        returnScrollTop = null;
         tools = [];
         directories = [];
         directoryMap.clear();
@@ -357,6 +372,17 @@
     }
     if (panel) panel.hidden = !active;
     syncOriginal();
+    if (active && panel && returnScrollTop !== null) {
+      const target = returnScrollTop;
+      const returningPanel = panel;
+      // Let the home layout and the browser's history scroll restoration finish first.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!active || panel !== returningPanel || returnScrollTop !== target || !isHomeRoute()) return;
+        panel.scrollTop = target;
+        scrollTop = panel.scrollTop;
+        returnScrollTop = null;
+      }));
+    }
   };
   function schedule() { if (!scheduled) { scheduled = true; setTimeout(update, 0); } }
   const style = node('style');

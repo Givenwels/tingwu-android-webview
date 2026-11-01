@@ -66,20 +66,29 @@ class RecordingMicrophoneTest {
                         } else WebResourceResponse("text/plain", "UTF-8", byteArrayOf().inputStream())
                     }
                 }
-                webView.loadUrl("https://tingwu.aliyun.com/doc/record")
+                // Production loads the workspace only after Android grants the microphone.
+                // Loading a second page here races the grant callback's own loadWorkspace().
             }
-            var deniedPageInstance: String? = null
             if (InstrumentationRegistry.getArguments().getString("denyFirst") == "true") {
                 val deny = device.wait(Until.findObject(By.res(
                     "com.android.permissioncontroller", "permission_deny_button",
                 )), 15_000) ?: error("Android did not show the microphone permission dialog")
                 deny.click()
-                awaitJs(webView, "window.preflightComplete === true && !window.microphoneAllowed")
-                deniedPageInstance = js(webView, "window.preflightInstance")
+                val retryDeadline = SystemClock.elapsedRealtime() + 5_000
+                var readyToRetry = false
+                while (!readyToRetry && SystemClock.elapsedRealtime() < retryDeadline) {
+                    scenario.onActivity { activity ->
+                        readyToRetry = activity.findViewById<View>(retryViewId).isShown
+                    }
+                    if (!readyToRetry) SystemClock.sleep(100)
+                }
+                assertTrue("A denied microphone needs a working retry action", readyToRetry)
                 scenario.onActivity { activity ->
                     val retry = activity.findViewById<View>(retryViewId)
                     assertEquals("A denied microphone needs a working retry action", View.VISIBLE, retry.visibility)
                     assertTrue("The retry action must be accessible", retry.isShown)
+                    assertTrue("Do not initialize the official microphone page before Android grants access",
+                        webView.url.isNullOrBlank() || webView.url == "about:blank")
                     retry.performClick()
                 }
             }
@@ -87,10 +96,6 @@ class RecordingMicrophoneTest {
                 "com.android.permissioncontroller", "permission_allow_foreground_only_button",
             )), 15_000) ?: error("Android did not show the microphone permission dialog")
             allow.click()
-            if (deniedPageInstance != null) {
-                // Do not mistake the previous page's cached rejection for the new preflight.
-                awaitJs(webView, "window.preflightInstance && window.preflightInstance !== $deniedPageInstance")
-            }
             awaitJs(webView, "window.preflightComplete === true")
             assertEquals("Official getUserMedia preflight failed: ${js(webView, "window.microphoneError")}",
                 "true", js(webView, "window.microphoneAllowed"))

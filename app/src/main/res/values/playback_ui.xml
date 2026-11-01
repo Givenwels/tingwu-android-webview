@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_ui_title_fallback">当前音频</string>
+    <string name="playback_ui_play">继续播放</string>
+    <string name="playback_ui_pause">暂停播放</string>
+    <string name="playback_ui_close">关闭播放</string>
+    <string name="playback_ui_open">打开播放详情：%1$s，%2$s</string>
+    <string name="playback_ui_time">%1$s / %2$s</string>
+    <string name="playback_ui_unknown_duration">--:--</string>
+    <string name="playback_ui_time_description">已播放 %1$s，共 %2$s</string>
+    <string name="playback_ui_time_unknown_description">已播放 %1$s，时长未知</string>
+    <string name="playback_ui_floating_window_title">通义听悟悬浮播放</string>
+    <string name="playback_ui_floating_open">打开播放详情：%1$s，%2$s。拖动标题可移动播放条</string>
+    <string name="playback_ui_floating_close">停止并关闭播放</string>
+
+    <color name="playback_ui_surface">#211A31</color>
+    <color name="playback_ui_border">#756293</color>
+    <color name="playback_ui_text">#F6F0FF</color>
+    <color name="playback_ui_text_secondary">#D0C3E6</color>
+    <color name="playback_ui_accent">#B79AF8</color>
+    <color name="playback_ui_on_accent">#211331</color>
+    <color name="playback_ui_ripple">#40D9C7FF</color>
+</resources>
