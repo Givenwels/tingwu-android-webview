@@ -8,6 +8,40 @@ import org.junit.Test
 
 class UrlPolicyTest {
     @Test
+    fun `recording completion accepts only the official home and saved record routes`() {
+        listOf(
+            "https://tingwu.aliyun.com/home",
+            "https://tingwu.aliyun.com/home/?from=record",
+            "https://tingwu.aliyun.com/doc/transcripts/abc123",
+            "https://tingwu.aliyun.com/discover/transcripts/abc123?channelid=test",
+        ).forEach { assertTrue(it, UrlPolicy.isRecordingCompletionUrl(it)) }
+        listOf(
+            "https://tingwu.aliyun.com/doc/record",
+            "https://tingwu.aliyun.com/doc/edit/record",
+            "https://tingwu.aliyun.com/doc/transcripts/",
+            "https://tingwu.aliyun.com/home-other",
+            "https://tingwu.aliyun.com/login",
+            "http://tingwu.aliyun.com/home",
+            "https://evil.example/doc/transcripts/abc123",
+            "https://tingwu.aliyun.com:8443/home",
+        ).forEach { assertFalse(it, UrlPolicy.isRecordingCompletionUrl(it)) }
+    }
+
+    @Test
+    fun `microphone is restricted to the exact Tingwu HTTPS origin`() {
+        assertTrue(UrlPolicy.isTrustedRecordingOrigin("https://tingwu.aliyun.com"))
+        assertTrue(UrlPolicy.isTrustedRecordingOrigin("https://tingwu.aliyun.com:443/doc/record"))
+        listOf(
+            "http://tingwu.aliyun.com",
+            "https://tingwu.aliyun.com:8443",
+            "https://passport.aliyun.com",
+            "https://tingwu.aliyun.com.example.org",
+            "https://evil.example@tingwu.aliyun.com",
+            "not a url",
+        ).forEach { assertFalse(it, UrlPolicy.isTrustedRecordingOrigin(it)) }
+    }
+
+    @Test
     fun `trusted media origins accept aliyun and tingwu HTTPS hosts`() {
         assertTrue(UrlPolicy.isTrustedMediaOrigin("https://tingwu.aliyun.com/"))
         assertTrue(UrlPolicy.isTrustedMediaOrigin("https://passport.aliyun.com/login"))

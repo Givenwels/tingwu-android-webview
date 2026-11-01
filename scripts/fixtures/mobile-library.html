@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#f7f7ff;color:#27264d;font:16px sans-serif}header{padding:24px;background:#8170f9;color:white}.tabsTools,.myTabsTools{padding:16px;background:white}.tabs,.myTabs{display:flex;gap:24px}.tab,.tabInner{cursor:pointer;padding:10px 0}.current,.myCurrent{color:#605ce5;border-bottom:3px solid #605ce5}.staticListMain{padding:12px}.original-card{padding:24px;margin:12px 0;border-radius:16px;background:white}
+</style></head><body>
+<header>听悟一下，高效开会</header>
+<div class="tabsTools"><div class="tabs"><div class="tab current" id="discover-tab" onclick="changeTab(false)">发现</div><div class="tab" id="mine-tab" onclick="changeTab(true)"><div class="myTab"><span>我的</span></div></div></div></div>
+<div id="discover-pane">推荐内容</div>
+<div id="mine-pane" hidden>
+  <div class="myTabsTools"><div class="myTabs"><div class="tabInner myCurrent" onclick="changeInner(this)">记录</div><div class="tabInner" onclick="changeInner(this)">收藏</div><div class="tabInner" onclick="changeInner(this)">分享</div></div><div class="myTabsButton">排序　筛选</div></div>
+  <div class="staticListMain"><div class="scroller"><div class="uni-scroll-view-content"><div class="original-card">原有记录卡片</div><div class="original-card">另一条记录</div></div></div></div>
+</div>
+<script>
+window.requests=[];window.routes=[];window.folderFailure=false;
+window.changeTab=mine=>{
+  document.querySelector('#mine-tab').classList.toggle('current',mine);
+  document.querySelector('#discover-tab').classList.toggle('current',!mine);
+  document.querySelector('#discover-pane').hidden=mine;
+  document.querySelector('#mine-pane').hidden=!mine;
+};
+window.changeInner=element=>{document.querySelectorAll('.tabInner').forEach(node=>node.classList.toggle('myCurrent',node===element));};
+window.uni={navigateTo:({url})=>{window.routes.push(url);location.hash='#'+url;}};
+window.tingwuRequest=async request=>{
+  window.requests.push(JSON.parse(JSON.stringify(request)));
+  if(request.data.action==='getDirList'){
+    if(window.folderFailure)throw {code:'NETWORK',message:'temporary failure'};
+    return {data:{success:true,code:'0',data:[{dirId:0,dirName:'未分类'},{dirId:12,dirName:'项目资料',children:[{dirId:13,dirName:'周会',children:[]}]},{dirId:20,dirName:'学习资料',children:[]}]}};
+  }
+  if(request.data.action==='getTransList'){
+    const id=String(request.data.filter.dirId);
+    if(window.recordGates&&window.recordGates[id])await window.recordGates[id];
+    const rows=window.recordRows||({12:[{transId:'record-12',tag:{showName:'方案讨论'},status:0}],13:[{transId:'record-13',cardInfo:{tag:{showName:'周会记录'}},status:0}],20:[{transId:'record-20',tag:{showName:'课程笔记'},status:0}]})[id]||[];
+    const filtered=rows.filter(row=>!request.data.filter.showName||row.tag.showName.includes(request.data.filter.showName));
+    const start=(request.data.pageNo-1)*request.data.pageSize;
+    return {data:{success:true,code:'0',data:filtered.slice(start,start+request.data.pageSize),total:filtered.length}};
+  }
+  throw new Error('Unexpected action: '+request.data.action);
+};
+</script></body></html>

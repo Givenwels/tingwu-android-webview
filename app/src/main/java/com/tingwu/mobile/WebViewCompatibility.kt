@@ -1,41 +1,18 @@
 package com.tingwu.mobile
 
 object WebViewCompatibility {
-    private val chromiumVersionPattern = Regex("""Chrome/[\d.]+""")
+    private val chromiumPattern = Regex("""Chrome/([\d.]+)""")
+    private val versionPattern = Regex("""\d+\.\d+\.\d+\.\d+""")
 
-    data class DisplaySettings(
-        val userAgent: String,
-        val useWideViewPort: Boolean,
-        val loadWithOverviewMode: Boolean,
-    )
+    fun chromiumVersion(defaultUserAgent: String, providerVersion: String? = null): String =
+        chromiumPattern.find(defaultUserAgent)?.groupValues?.get(1)
+            ?: versionPattern.find(providerVersion.orEmpty())?.value
+            ?: "120.0.0.0"
 
-    fun displaySettings(
-        defaultUserAgent: String,
-        desktopCompatibilityEnabled: Boolean,
-    ): DisplaySettings =
-        if (desktopCompatibilityEnabled) {
-            DisplaySettings(
-                userAgent = desktopUserAgent(defaultUserAgent),
-                useWideViewPort = true,
-                loadWithOverviewMode = true,
-            )
-        } else {
-            DisplaySettings(
-                userAgent = defaultUserAgent,
-                useWideViewPort = false,
-                loadWithOverviewMode = false,
-            )
-        }
-
-    fun desktopUserAgent(defaultUserAgent: String): String {
-        val chromiumVersion =
-            chromiumVersionPattern.find(defaultUserAgent)?.value
-                ?: "Chrome/120.0.0.0"
-
-        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+    fun desktopUserAgent(defaultUserAgent: String, providerVersion: String? = null): String =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
             "AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "$chromiumVersion Safari/537.36"
-    }
+            "Chrome/${chromiumVersion(defaultUserAgent, providerVersion)} Safari/537.36"
 
     fun shouldPauseWebView(activityIsFinishing: Boolean): Boolean = activityIsFinishing
 }

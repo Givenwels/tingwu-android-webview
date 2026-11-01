@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:1140px; font:14px sans-serif; color:#27264d; background:#f6f6ff; }
+    #root { display:flex; width:100%; min-width:1140px; height:100vh; }
+    nav { width:240px; padding:28px; background:white; }
+    .workspace { flex:1; padding:32px; }
+    .AddSummaryPopover_AddSummary { padding:12px 16px; }
+    .ant-modal-wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#0005; }
+    .ant-modal { width:640px; background:white; border-radius:12px; padding:24px; }
+    .ant-modal button { padding:12px 20px; background:#605ce5; color:white; border:0; border-radius:12px; }
+    .desktop-record { min-width:1140px; width:100%; height:100%; }
+    .desktop-topbar { height:88px; min-width:1140px; }
+    .viewport { height:100%; padding-left:112px; display:flex; align-items:center; }
+    .meeting-title { font-size:18px; max-width:30vw; }
+    .titleContain { width:calc(45vw - 347px); }
+    .leftContain { position:absolute; width:88px; height:100%; background:white; padding:20px; }
+    .desktop-record > .content { display:flex; padding-left:112px; height:calc(100% - 88px); }
+    .desktop-record > .content > .left-area { flex:7; width:0; height:100%; }
+    .summary-area { padding:20px; height:calc(100% - 100px); background:white; }
+    .summary-container { max-width:960px; line-height:1.9; }
+    .bottomContain { min-width:700px; display:flex; justify-content:space-between; padding:20px; background:white; }
+    .bottomContain > .content { display:flex; align-items:center; gap:10px; }
+    .right-btn { display:flex; gap:16px; }
+    .stop-btn,.play-btn { display:flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid #ececf6; border-radius:50%; cursor:pointer; }
+    .rightArea { flex:4; width:0; min-width:320px; padding:20px; background:white; }
+  </style>
+</head>
+<body>
+  <div id="root"><nav>电脑端导航：工作台、我的记录、回收站</nav><div class="workspace">
+    <button class="addSummaryBtn" onclick="document.querySelector('#new-menu').hidden=false">新建</button>
+    <div id="new-menu" hidden><div class="AddSummaryPopover_AddSummary" onclick="showLanguage()">开启实时记录</div></div>
+  </div></div>
+  <script>
+    window.messages=[];
+    window.TingwuRecorder={postMessage:message=>window.messages.push(JSON.parse(message))};
+    window.showLanguage=()=>{
+      document.querySelector('#new-menu').hidden=true;
+      const dialog=document.createElement('div');
+      dialog.className='ant-modal-wrap';
+      dialog.innerHTML='<div class="ant-modal" role="dialog"><h2>选择录音语言</h2><p>中文 · 自动区分发言人</p><button id="begin-record" onclick="beginRecord()">开始实时记录</button></div>';
+      document.body.append(dialog);
+    };
+    window.beginRecord=async()=>{
+      document.querySelector('.ant-modal-wrap')?.remove();
+      history.pushState({},'', '/doc/record');
+      document.querySelector('#root').innerHTML=`<nav>电脑端导航</nav><div class="desktop-record">
+        <div class="desktop-topbar"><div class="viewport"><div class="titleContain"><div class="meeting-title">会议实时记录</div></div></div></div>
+        <div class="leftContain"><div class="backBox">返回电脑主页</div><div class="actionItem">保存</div></div>
+        <div class="content"><div class="left-area">
+          <div class="summary-area"><h3>实时转写</h3><div class="summary-container">这是一段用于验证手机布局的测试转写内容。<br>这里只验证布局和浏览器采音状态，不连接真实会议服务。</div></div>
+          <div class="bottomContain"><div class="content"><span class="running-text">录音中…</span><span class="running-time">00:12</span></div><div class="right-btn"><div data-e2e-test-id="record_finish_icon" class="stop-btn" onclick="finishRecord()">结束</div><a data-e2e-test-id="record_stop_icon" class="play-btn">暂停</a></div></div>
+        </div><div class="rightArea">会议笔记</div></div>
+      </div>`;
+      window.stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    };
+    window.finishRecord=()=>{
+      window.stream?.getTracks().forEach(track=>track.stop());
+      history.pushState({},'', '/doc/transcripts/test-record');
+      document.querySelector('#root').innerHTML='<div>录音已保存</div>';
+    };
+  </script>
+</body>
+</html>

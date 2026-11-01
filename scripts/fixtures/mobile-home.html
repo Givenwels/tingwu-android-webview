@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { margin:0; font-family:sans-serif; background:#f8f8ff; }
+    header { padding:28px 20px; color:white; background:#8170f9; }
+    h1 { font-size:28px; }
+    .menuForTop { display:flex; justify-content:space-around; }
+    .menuItem { padding:18px 8px; cursor:pointer; }
+    main { padding:24px; }
+    .record-card { padding:20px; border-radius:20px; background:white; }
+    #unsupported { display:none; }
+  </style>
+</head>
+<body>
+  <header><h1>听悟一下，高效开会</h1><div class="menuForTop">
+    <div class="menuItem" onclick="document.querySelector('#unsupported').style.display='block'">
+      <div class="menuItemImage">🎙</div><div class="menuItemImageText">实时记录</div>
+    </div>
+    <div class="menuItem" id="upload"><div class="menuItemImageText">手机音视频</div></div>
+  </div></header>
+  <main><div class="record-card">我的记录：一次讨论中提到了实时记录这个功能。</div></main>
+  <div id="unsupported">实时记录功能，请前往 PC 版本使用</div>
+  <script>window.messages=[]; window.TingwuRecordingEntry={postMessage:message=>window.messages.push(message)};</script>
+</body>
+</html>

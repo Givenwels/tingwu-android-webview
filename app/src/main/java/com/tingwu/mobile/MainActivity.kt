@@ -20,6 +20,8 @@ import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
+import android.webkit.WebMessage
+import android.webkit.WebMessagePort
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -33,6 +35,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.tingwu.mobile.databinding.ActivityMainBinding
 import java.io.File
 import java.util.Locale
@@ -48,8 +52,26 @@ class MainActivity : AppCompatActivity() {
     private var pendingWebResources: Array<String> = emptyArray()
 
     private var mainFrameError = false
-    private lateinit var mobileUserAgent: String
-    private var desktopCompatibilityEnabled = false
+    private var openingRecorder = false
+    private var mediaPlaybackPort: WebMessagePort? = null
+    private val mediaPlaybackScript by lazy {
+        assets.open("media-playback.js").bufferedReader().use { it.readText() }
+    }
+    private val mobileRecordingEntryScript by lazy {
+        assets.open("mobile-record-entry.js").bufferedReader().use { it.readText() }
+    }
+    private val mobileLibraryScript by lazy {
+        assets.open("mobile-library.js").bufferedReader().use { it.readText() }
+    }
+    private val mobilePageScript by lazy {
+        mobileRecordingEntryScript + "\n" + mobileLibraryScript + "\n" + mediaPlaybackScript
+    }
+
+    private val recordingLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            openingRecorder = false
+            if (result.resultCode == Activity.RESULT_OK) binding.webView.loadUrl(BuildConfig.TINGWU_URL)
+        }
 
     private val filePickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -75,7 +97,7 @@ class MainActivity : AppCompatActivity() {
         configureActions()
         configureBackNavigation()
 
-        if (savedInstanceState == null) {
+        if (savedInstanceState?.getBoolean("mobile_home_profile") != true) {
             binding.webView.loadUrl(BuildConfig.TINGWU_URL)
         } else {
             binding.webView.restoreState(savedInstanceState)
@@ -85,11 +107,12 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-        mobileUserAgent = binding.webView.settings.userAgentString
 
         with(binding.webView.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
+            useWideViewPort = false
+            loadWithOverviewMode = false
             mediaPlaybackRequiresUserGesture = false
             builtInZoomControls = true
             displayZoomControls = false
@@ -101,7 +124,6 @@ class MainActivity : AppCompatActivity() {
             safeBrowsingEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
         }
-        applyDisplayMode(reload = false)
 
         CookieManager.getInstance().apply {
             setAcceptCookie(true)
@@ -111,6 +133,25 @@ class MainActivity : AppCompatActivity() {
         binding.webView.webViewClient = TingwuWebViewClient()
         binding.webView.webChromeClient = TingwuWebChromeClient()
         binding.webView.setDownloadListener(createDownloadListener())
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+                binding.webView,
+                "TingwuRecordingEntry",
+                setOf("https://tingwu.aliyun.com"),
+            ) { _, message, sourceOrigin, isMainFrame, _ ->
+                if (isMainFrame && message.data == "open-recording" &&
+                    UrlPolicy.isTrustedRecordingOrigin(sourceOrigin.toString()) &&
+                    UrlPolicy.isTrustedRecordingOrigin(binding.webView.url.orEmpty())
+                ) openRecorder()
+            }
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(
+                binding.webView,
+                mobilePageScript,
+                setOf("https://tingwu.aliyun.com"),
+            )
+        }
     }
 
     private fun configureActions() {
@@ -126,46 +167,16 @@ class MainActivity : AppCompatActivity() {
         binding.browserButton.setOnClickListener {
             openInSystemBrowser(binding.webView.url ?: BuildConfig.TINGWU_URL)
         }
-        binding.displayModeButton.setOnClickListener {
-            desktopCompatibilityEnabled = !desktopCompatibilityEnabled
-            applyDisplayMode(reload = true)
-            val message =
-                if (desktopCompatibilityEnabled) {
-                    R.string.desktop_compatibility_enabled
-                } else {
-                    R.string.mobile_mode_enabled
-                }
-            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-        }
     }
 
-    private fun applyDisplayMode(reload: Boolean) {
-        val displaySettings =
-            WebViewCompatibility.displaySettings(
-                defaultUserAgent = mobileUserAgent,
-                desktopCompatibilityEnabled = desktopCompatibilityEnabled,
-            )
-        with(binding.webView.settings) {
-            userAgentString = displaySettings.userAgent
-            useWideViewPort = displaySettings.useWideViewPort
-            loadWithOverviewMode = displaySettings.loadWithOverviewMode
-        }
-        binding.displayModeButton.setText(
-            if (desktopCompatibilityEnabled) {
-                R.string.mobile_mode
-            } else {
-                R.string.desktop_compatibility_mode
-            },
+    private fun openRecorder() {
+        if (openingRecorder || isFinishing) return
+        openingRecorder = true
+        binding.webView.evaluateJavascript(
+            "document.querySelectorAll('audio,video').forEach(media => media.pause());",
+            null,
         )
-        if (reload) {
-            val currentUrl =
-                binding.webView.url
-                    ?.takeIf(UrlPolicy::shouldStayInWebView)
-                    ?.takeIf { it != "about:blank" }
-                    ?: BuildConfig.TINGWU_URL
-            binding.webView.stopLoading()
-            binding.webView.loadUrl(currentUrl)
-        }
+        recordingLauncher.launch(Intent(this, RecordingActivity::class.java))
     }
 
     private fun configureBackNavigation() {
@@ -190,6 +201,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleNavigation(url: String): Boolean {
+        if (UrlPolicy.isTrustedRecordingOrigin(url) &&
+            Uri.parse(url).path?.trimEnd('/') in setOf("/doc/record", "/doc/edit/record")
+        ) {
+            openRecorder()
+            return true
+        }
         if (UrlPolicy.shouldStayInWebView(url)) return false
         if (!UrlPolicy.shouldOpenExternally(url)) return true
         openExternalUrl(url)
@@ -393,10 +410,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        val canRecord =
+            UrlPolicy.isTrustedRecordingOrigin(request.origin.toString()) &&
+                UrlPolicy.isTrustedRecordingOrigin(binding.webView.url.orEmpty())
+
         val supportedResources =
             request.resources.filter {
-                it == PermissionRequest.RESOURCE_AUDIO_CAPTURE ||
-                    it == PermissionRequest.RESOURCE_VIDEO_CAPTURE
+                it == PermissionRequest.RESOURCE_VIDEO_CAPTURE ||
+                    (it == PermissionRequest.RESOURCE_AUDIO_CAPTURE && canRecord)
             }
         if (supportedResources.isEmpty()) {
             request.deny()
@@ -430,8 +451,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun completeWebPermissionRequest() {
         val request = pendingWebPermission ?: return
+        val canRecord =
+            UrlPolicy.isTrustedRecordingOrigin(request.origin.toString()) &&
+                UrlPolicy.isTrustedRecordingOrigin(binding.webView.url.orEmpty())
         val grantedResources =
             pendingWebResources.filter {
+                if (it == PermissionRequest.RESOURCE_AUDIO_CAPTURE && !canRecord) {
+                    return@filter false
+                }
                 val androidPermission =
                     when (it) {
                         PermissionRequest.RESOURCE_AUDIO_CAPTURE -> Manifest.permission.RECORD_AUDIO
@@ -519,6 +546,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("mobile_home_profile", true)
         binding.webView.saveState(outState)
         super.onSaveInstanceState(outState)
     }
@@ -526,11 +554,6 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         if (WebViewCompatibility.shouldPauseWebView(isFinishing)) {
             binding.webView.onPause()
-        } else if (BackgroundPlaybackPolicy.shouldStartKeepAlive(isFinishing)) {
-            BackgroundPlaybackService.start(
-                context = this,
-                includeMicrophone = hasRecordAudioPermission(),
-            )
         }
         CookieManager.getInstance().flush()
         super.onPause()
@@ -538,17 +561,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (BackgroundPlaybackPolicy.shouldPrepareKeepAliveOnResume()) {
-            BackgroundPlaybackService.start(
-                context = this,
-                includeMicrophone = hasRecordAudioPermission(),
-            )
-        }
         binding.webView.onResume()
+        mediaPlaybackPort?.postMessage(WebMessage("query-state"))
     }
 
     override fun onDestroy() {
-        BackgroundPlaybackService.stop(this)
+        stopObservingMediaPlayback()
         cancelFileChooser()
         pendingWebPermission?.deny()
         pendingWebPermission = null
@@ -564,9 +582,46 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun hasRecordAudioPermission(): Boolean =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
+    private fun stopObservingMediaPlayback() {
+        mediaPlaybackPort?.close()
+        mediaPlaybackPort = null
+        BackgroundPlaybackService.stop(this)
+    }
+
+    private fun observeMediaPlayback(view: WebView, url: String) {
+        stopObservingMediaPlayback()
+        if (!UrlPolicy.isTrustedMediaOrigin(url)) return
+
+        val origin = Uri.parse(url).buildUpon().path("").clearQuery().fragment(null).build()
+        val ports = view.createWebMessageChannel()
+        val nativePort = ports[0]
+        mediaPlaybackPort = nativePort
+        nativePort.setWebMessageCallback(
+            object : WebMessagePort.WebMessageCallback() {
+                override fun onMessage(port: WebMessagePort, message: WebMessage) {
+                    if (port !== mediaPlaybackPort ||
+                        !UrlPolicy.isTrustedMediaOrigin(view.url.orEmpty())
+                    ) return
+
+                    when (message.data) {
+                        "open-recording" -> openRecorder()
+                        "playing" -> BackgroundPlaybackService.start(this@MainActivity)
+                        "stopped" -> BackgroundPlaybackService.stop(this@MainActivity)
+                    }
+                }
+            },
+        )
+        view.evaluateJavascript(mobilePageScript) {
+            if (mediaPlaybackPort === nativePort && view.url == url) {
+                view.postWebMessage(
+                    WebMessage("tingwu-media-playback", arrayOf(ports[1])),
+                    origin,
+                )
+            } else {
+                ports[1].close()
+            }
+        }
+    }
 
     private inner class TingwuWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(
@@ -579,6 +634,10 @@ class MainActivity : AppCompatActivity() {
             url: String,
             favicon: android.graphics.Bitmap?,
         ) {
+            pendingWebPermission?.deny()
+            pendingWebPermission = null
+            pendingWebResources = emptyArray()
+            stopObservingMediaPlayback()
             mainFrameError = false
             binding.errorPanel.visibility = View.GONE
             binding.webView.visibility = View.VISIBLE
@@ -592,12 +651,7 @@ class MainActivity : AppCompatActivity() {
             if (!mainFrameError) {
                 binding.progressBar.visibility = View.GONE
             }
-            if (UrlPolicy.isTrustedMediaOrigin(url)) {
-                view.evaluateJavascript(
-                    BackgroundPlaybackPolicy.pageVisibilityKeepAliveScript(),
-                    null,
-                )
-            }
+            if (!mainFrameError) observeMediaPlayback(view, url)
         }
 
         override fun onReceivedError(

@@ -30,6 +30,20 @@ object UrlPolicy {
         }
     }
 
+    fun isTrustedRecordingOrigin(url: String): Boolean {
+        val uri = parseUri(url) ?: return false
+        return uri.scheme.equals("https", ignoreCase = true) &&
+            uri.host.equals("tingwu.aliyun.com", ignoreCase = true) &&
+            uri.port in setOf(-1, 443) && uri.userInfo == null
+    }
+
+    fun isRecordingCompletionUrl(url: String): Boolean {
+        if (!isTrustedRecordingOrigin(url)) return false
+        val path = parseUri(url)?.path ?: return false
+        return path == "/home" || path == "/home/" ||
+            Regex("""/(?:doc|discover)/transcripts/[^/]+/?""").matches(path)
+    }
+
     fun shouldStayInWebView(url: String): Boolean {
         val scheme = parseUri(url)?.scheme?.lowercase() ?: return false
         return scheme == "http" || scheme == "https"
