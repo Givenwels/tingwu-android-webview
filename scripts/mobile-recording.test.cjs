@@ -17,6 +17,24 @@ before(async () => {
 });
 after(async () => { await browser?.close(); });
 
+test('microphone preflight is distinct from an actual recording session and pause clears protection', async () => {
+  const { context, page } = await pageFor(fixture('desktop-recorder-prestart.html'));
+  try {
+    await page.addScriptTag({ content: asset('recorder-mobile.js') });
+    await page.evaluate(async () => { window.stream = await navigator.mediaDevices.getUserMedia({ audio: true }); });
+    await page.waitForFunction(() => window.messages.some(message => message.type === 'capture' && message.active && message.recording === false));
+    await page.evaluate(() => {
+      const controls = document.createElement('div');
+      controls.className = 'bottomContain';
+      controls.innerHTML = '<div class="stop-btn" data-e2e-test-id="record_finish_icon">结束</div>';
+      document.querySelector('.desktop-record > .content').appendChild(controls);
+    });
+    await page.waitForFunction(() => window.messages.some(message => message.type === 'capture' && message.active && message.recording === true));
+    await page.evaluate(() => window.stream.getTracks().forEach(track => track.stop()));
+    await page.waitForFunction(() => window.messages.some(message => message.type === 'capture' && !message.active && message.recording === false));
+  } finally { await context.close(); }
+});
+
 test('finish confirmation content and buttons fit a narrow phone without changing the save flow', async () => {
   const { context, page } = await pageFor(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <div class="ant-modal-wrap"><div class="ant-modal" style="width:520px"><div class="ant-modal-content"><div class="ant-modal-body">

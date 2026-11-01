@@ -5,7 +5,9 @@
   let scheduled = false;
   let preferredMine = false;
   let content = null;
+  let nativeList = null;
   let panel = null;
+  let scrollTop = 0;
   let tools = [];
   let active = false;
   let directoryStarted = false;
@@ -24,10 +26,15 @@
   const directoryMap = new Map();
   const hiddenAttribute = 'data-tingwu-library-hidden';
   const toolAttribute = 'data-tingwu-folder-tools-hidden';
+  const layoutAttribute = 'data-tingwu-library-container';
 
   const css = `
     [data-tingwu-library-hidden],[data-tingwu-folder-tools-hidden]{display:none!important}
-    [data-tingwu-library-panel]{box-sizing:border-box;width:100%;min-width:0;margin:0 0 16px;padding:16px;border-radius:16px;background:#fff;color:#27264d;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    [data-tingwu-library-container]{display:flex;flex-direction:column;min-height:0}
+    [data-tingwu-library-container]>.myTabsTools{flex:none}
+    [data-tingwu-library-container]>.staticListMain{flex:1;min-height:0;height:0!important}
+    [data-tingwu-library-panel]{box-sizing:border-box;flex:0 1 auto;overflow-y:auto;width:100%;min-width:0;min-height:0;margin:0 0 16px;padding:16px;border-radius:16px;background:#fff;color:#27264d;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    [data-tingwu-library-selected]{flex:1}
     [data-tingwu-library-panel] *{box-sizing:border-box;min-width:0}
     [data-tingwu-library-panel] button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
     .tw-library-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
@@ -73,11 +80,18 @@
     return mine ? { mine, inner } : null;
   };
   const syncOriginal = () => {
-    if (content) Array.from(content.children).forEach(child => {
-      if (child === panel) return;
-      if (active && selected) child.setAttribute(hiddenAttribute, '');
-      else child.removeAttribute(hiddenAttribute);
-    });
+    if (content) {
+      if (active) content.setAttribute(layoutAttribute, '');
+      else content.removeAttribute(layoutAttribute);
+    }
+    if (nativeList) {
+      if (active && selected) nativeList.setAttribute(hiddenAttribute, '');
+      else nativeList.removeAttribute(hiddenAttribute);
+    }
+    if (panel) {
+      if (selected) panel.setAttribute('data-tingwu-library-selected', '');
+      else panel.removeAttribute('data-tingwu-library-selected');
+    }
     tools.forEach(tool => {
       if (active && selected) tool.setAttribute(toolAttribute, '');
       else tool.removeAttribute(toolAttribute);
@@ -110,6 +124,8 @@
     return list;
   }, []);
   const select = directory => {
+    if (panel) panel.scrollTop = 0;
+    scrollTop = 0;
     selected = directory;
     keyword = '';
     records = [];
@@ -144,13 +160,19 @@
     }
   };
   async function loadRecords(append) {
-    if (!selected || recordLoading) return;
+    if (!active || !selected || recordLoading || (append && !hasMore)) return;
     const ticket = ++recordTicket;
     const directory = selected;
     const nextPage = append ? pageNo + 1 : 1;
     recordLoading = true;
     recordError = '';
-    if (!append) records = [];
+    if (!append) {
+      records = [];
+      pageNo = 0;
+      hasMore = false;
+      if (panel) panel.scrollTop = 0;
+      scrollTop = 0;
+    }
     render();
     try {
       const result = await request('/api/trans/request?getTransList', {
@@ -158,16 +180,30 @@
         filter: { dirId: directory.id, status: [0, 1, 2, 3], fileTypes: [], showName: keyword, searchFiled: ['title', 'docSrc'] },
       });
       if (ticket !== recordTicket || !selected || String(selected.id) !== String(directory.id)) return;
-      const rows = result.data.map(item => Object.assign({}, item, item.cardInfo || {}));
+      const seen = new Set(append ? records.map(recordId) : []);
+      const rows = [];
+      result.data.forEach(item => {
+        if (!item) return;
+        const row = Object.assign({}, item, item.cardInfo || {});
+        const id = recordId(row);
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        rows.push(row);
+      });
       records = append ? records.concat(rows) : rows;
       pageNo = nextPage;
-      hasMore = Number.isFinite(Number(result.total)) ? records.length < Number(result.total) : rows.length === 20;
+      // Missing counts are unknown, not zero. The server can return fewer rows than requested.
+      const total = [result.total, result.totalNum].find(value =>
+        (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) &&
+        Number.isSafeInteger(Number(value)) && Number(value) >= records.length);
+      hasMore = rows.length > 0 && (total === undefined || records.length < Number(total));
     } catch (_) {
       if (ticket === recordTicket) recordError = '记录加载失败，请重试';
     } finally {
       if (ticket === recordTicket) { recordLoading = false; render(); }
     }
   }
+  const recordId = record => String(record.transId || record.demoId || '').trim();
   const openRecord = record => {
     const id = record.transId || record.demoId;
     if (id === undefined || id === null || !String(id).trim()) return;
@@ -177,6 +213,7 @@
   };
   function render() {
     if (!panel) return;
+    const previousTop = panel.scrollTop;
     while (panel.firstChild) panel.removeChild(panel.firstChild);
     const heading = node('div', 'tw-library-heading');
     heading.append(node('strong', '', '我的文件夹'), button('刷新', 'tw-library-link', () => {
@@ -226,9 +263,9 @@
       });
       panel.append(form);
       if (recordError) {
-        panel.append(node('div', 'tw-library-status', recordError), button('重试记录', 'tw-library-link', () => loadRecords(false)));
+        panel.append(node('div', 'tw-library-status', recordError), button('重试记录', 'tw-library-link', () => loadRecords(pageNo > 0)));
       }
-      if (recordLoading) panel.append(node('div', 'tw-library-status', '正在加载记录…'));
+      if (recordLoading && !records.length) panel.append(node('div', 'tw-library-status', '正在加载记录…'));
       records.forEach(record => {
         const title = record.showName || (record.tag && record.tag.showName) || record.title || record.meetingName || '未命名记录';
         const row = button('', 'tw-library-record', () => openRecord(record));
@@ -238,9 +275,15 @@
         panel.append(row);
       });
       if (!recordLoading && !recordError && !records.length) panel.append(node('div', 'tw-library-status', keyword ? '没有找到匹配的记录' : '此文件夹暂无记录'));
-      if (hasMore && !recordLoading) panel.append(button('加载更多', 'tw-library-link tw-library-more', () => loadRecords(true)));
+      if (hasMore) {
+        const more = button('加载更多', 'tw-library-link tw-library-more', () => loadRecords(true));
+        more.disabled = recordLoading;
+        more.setAttribute('aria-busy', String(recordLoading));
+        panel.append(more);
+      }
     }
     syncOriginal();
+    panel.scrollTop = previousTop;
   }
   const update = () => {
     scheduled = false;
@@ -258,6 +301,8 @@
         if (panel) panel.remove();
         panel = null;
         content = null;
+        nativeList = null;
+        scrollTop = 0;
         tools = [];
         directories = [];
         directoryMap.clear();
@@ -287,13 +332,24 @@
     if (active) {
       const container = current.inner.parentElement;
       const list = Array.from(container.querySelectorAll('.staticListMain'))[0];
-      const nextContent = list && (list.querySelector('.uni-scroll-view-content') || list.querySelector('.scroller'));
-      if (nextContent && (nextContent !== content || !panel || panel.parentElement !== nextContent)) {
+      // A sibling remains reachable even when the official list disables scrolling or is hidden.
+      if (list && (container !== content || list !== nativeList || !panel || panel.parentElement !== container)) {
+        if (content) content.removeAttribute(layoutAttribute);
+        if (nativeList) nativeList.removeAttribute(hiddenAttribute);
         if (panel) panel.remove();
-        content = nextContent;
+        content = container;
+        nativeList = list;
         panel = node('section');
         panel.setAttribute('data-tingwu-library-panel', '');
-        content.prepend(panel);
+        scrollTop = 0;
+        panel.addEventListener('scroll', () => {
+          const top = panel.scrollTop;
+          const down = top > scrollTop;
+          scrollTop = top;
+          if (down && active && selected && hasMore && !recordLoading && !recordError && !panel.hidden && isHomeRoute() &&
+              panel.scrollHeight - top - panel.clientHeight <= 160) loadRecords(true);
+        }, { passive: true });
+        content.insertBefore(panel, current.inner.nextSibling);
         tools = Array.from(document.querySelectorAll('.myTabsButton, .tabsTools .mySearch'));
         render();
       }

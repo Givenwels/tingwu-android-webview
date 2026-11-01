@@ -52,3 +52,9 @@ On Android 15 / WebView 124.0.6367.219, the delivered 1.0.10 APK passed this che
 
 This does not test real Xiaomi microphone hardware, account login, cloud upload, or live
 transcription under a real account.
+
+`-e class com.tingwu.mobile.RecordingBackgroundTest` checks the official encoder through
+70 seconds with the emulator display asleep and no WebView polling during that interval.
+It verifies the microphone foreground service and ongoing notification, no additional CPU
+wake lock while the screen is on, and service/wake-lock release after pause, stop and exit.
+It also resumes the same recording after waking. Host microphone input must remain disabled.

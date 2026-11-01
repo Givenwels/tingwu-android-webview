@@ -7,12 +7,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebMessage
@@ -29,6 +31,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.tingwu.mobile.databinding.ActivityRecordingBinding
@@ -43,6 +46,9 @@ class RecordingActivity : AppCompatActivity() {
     private var pageReady = false
     private var enteredRecording = false
     private var capturing = false
+    private var recordingProtected = false
+    private val notificationLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
     private val script by lazy {
         assets.open("recorder-mobile.js").bufferedReader().use { it.readText() }
     }
@@ -194,7 +200,7 @@ class RecordingActivity : AppCompatActivity() {
             }
             "capture" -> {
                 capturing = message.optBoolean("active", false)
-                binding.recordingWebView.keepScreenOn = capturing
+                updateRecordingProtection(capturing && message.optBoolean("recording", false))
                 if (!capturing) completeIfReturned(binding.recordingWebView.url.orEmpty())
             }
             "completed" -> if (!capturing) {
@@ -204,6 +210,39 @@ class RecordingActivity : AppCompatActivity() {
             "dismissed" -> if (!capturing) finish()
             "back-unavailable" ->
                 Toast.makeText(this, R.string.recording_finish_first, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun updateRecordingProtection(recording: Boolean) {
+        if (!recording) {
+            if (recordingProtected) RecordingForegroundService.stop(this)
+            recordingProtected = false
+            return
+        }
+        if (recordingProtected) return
+        if (!hasMicrophonePermission() || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            onRecordingProtectionFailed()
+            return
+        }
+        recordingProtected = RecordingForegroundService.start(this)
+        if (!recordingProtected) {
+            onRecordingProtectionFailed()
+            return
+        }
+        val preferences = getSharedPreferences("recording", MODE_PRIVATE)
+        if (Build.VERSION.SDK_INT >= 33 && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !preferences.getBoolean("notifications_requested", false)
+        ) {
+            preferences.edit().putBoolean("notifications_requested", true).apply()
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    internal fun onRecordingProtectionFailed() {
+        recordingProtected = false
+        if (!isFinishing && !isDestroyed) {
+            Toast.makeText(this, R.string.recording_background_unavailable, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -292,6 +331,8 @@ class RecordingActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        RecordingForegroundService.stop(this)
+        recordingProtected = false
         handler.removeCallbacks(loadTimeout)
         channel?.close()
         channel = null
@@ -319,6 +360,7 @@ class RecordingActivity : AppCompatActivity() {
             pendingMicrophone?.deny()
             pendingMicrophone = null
             capturing = false
+            updateRecordingProtection(false)
             view.keepScreenOn = false
             showLoading()
         }
@@ -337,6 +379,14 @@ class RecordingActivity : AppCompatActivity() {
 
         override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
             completeIfReturned(url)
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            capturing = false
+            updateRecordingProtection(false)
+            Toast.makeText(this@RecordingActivity, R.string.recording_load_error, Toast.LENGTH_LONG).show()
+            finish()
+            return true
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

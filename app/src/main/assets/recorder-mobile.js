@@ -5,6 +5,7 @@
   let port = null;
   let lastReady = null;
   let captureActive = false;
+  let recordingActive = false;
   let enteredRecord = false;
   let completed = false;
   let menuOpened = false;
@@ -28,9 +29,12 @@
   const reportCapture = () => {
     for (const track of audioTracks) if (track.readyState === 'ended') audioTracks.delete(track);
     const active = Array.from(audioTracks).some(track => track.readyState === 'live');
-    if (active !== captureActive) {
+    const recording = active && /\/doc\/(?:edit\/)?record\/?$/.test(location.pathname) &&
+      !!findVisible('[data-e2e-test-id="record_finish_icon"], .bottomContain .stop-btn');
+    if (active !== captureActive || recording !== recordingActive) {
       captureActive = active;
-      send({ type: 'capture', active });
+      recordingActive = recording;
+      send({ type: 'capture', active, recording });
       schedule();
     }
   };
@@ -195,6 +199,7 @@
     scheduled = false;
     applyLayout();
     if (!document.documentElement) return;
+    reportCapture();
     const root = recordingRoot();
     if (root && /\/doc\/(?:edit\/)?record\/?$/.test(location.pathname)) {
       exposeRecording(root);
@@ -251,18 +256,18 @@
       if (message.data === 'request-exit') requestExit();
       if (message.data === 'query-state') {
         if (lastReady) send(lastReady);
-        send({ type: 'capture', active: captureActive });
+        send({ type: 'capture', active: captureActive, recording: recordingActive });
         schedule();
       }
     };
     if (lastReady) send(lastReady);
-    send({ type: 'capture', active: captureActive });
+    send({ type: 'capture', active: captureActive, recording: recordingActive });
     schedule();
   });
   window.addEventListener('popstate', schedule);
   window.addEventListener('pagehide', () => {
     audioTracks.forEach(track => track.stop());
-    send({ type: 'capture', active: false });
+    send({ type: 'capture', active: false, recording: false });
   });
   new MutationObserver(schedule).observe(document, { childList: true, subtree: true });
   schedule();

@@ -1,14 +1,20 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 body{margin:0;background:#f7f7ff;color:#27264d;font:16px sans-serif}header{padding:24px;background:#8170f9;color:white}.tabsTools,.myTabsTools{padding:16px;background:white}.tabs,.myTabs{display:flex;gap:24px}.tab,.tabInner{cursor:pointer;padding:10px 0}.current,.myCurrent{color:#605ce5;border-bottom:3px solid #605ce5}.staticListMain{padding:12px}.original-card{padding:24px;margin:12px 0;border-radius:16px;background:white}
+/* H5 uses an outer scroll view, a clipped swiper and a native list with scroll-y disabled. */
+body{height:100vh;overflow:hidden}header{box-sizing:border-box;height:52px;padding:16px}.main{height:calc(100vh - 52px)}.uni-scroll-view,.uni-scroll-view-content{width:100%;height:100%}.outer-scroll{overflow:hidden auto}.homeTop{height:160px}.home-scroller{height:calc(100vh - 52px);display:flex;flex-direction:column}.body{flex:1;height:0;overflow:hidden}#mine-pane{height:100%;overflow:hidden}.staticListMain{height:100%;display:flex;flex-direction:column;padding:0}.staticListMain .scroller{height:0;flex:1}.native-scroll{overflow:hidden}[hidden]{display:none!important}
 </style></head><body>
 <header>听悟一下，高效开会</header>
+<div class="main isWeb"><div class="uni-scroll-view"><div class="uni-scroll-view outer-scroll"><div class="uni-scroll-view-content">
+<div class="homeTop"></div><div class="home-scroller">
 <div class="tabsTools"><div class="tabs"><div class="tab current" id="discover-tab" onclick="changeTab(false)">发现</div><div class="tab" id="mine-tab" onclick="changeTab(true)"><div class="myTab"><span>我的</span></div></div></div></div>
+<div class="body uni-swiper-wrapper">
 <div id="discover-pane">推荐内容</div>
 <div id="mine-pane" hidden>
   <div class="myTabsTools"><div class="myTabs"><div class="tabInner myCurrent" onclick="changeInner(this)">记录</div><div class="tabInner" onclick="changeInner(this)">收藏</div><div class="tabInner" onclick="changeInner(this)">分享</div></div><div class="myTabsButton">排序　筛选</div></div>
-  <div class="staticListMain"><div class="scroller"><div class="uni-scroll-view-content"><div class="original-card">原有记录卡片</div><div class="original-card">另一条记录</div></div></div></div>
+  <div class="staticListMain"><div class="scroller"><div class="uni-scroll-view"><div class="uni-scroll-view native-scroll"><div class="uni-scroll-view-content"><div class="original-card">原有记录卡片</div><div class="original-card">另一条记录</div></div></div></div></div></div>
 </div>
+</div></div></div></div></div></div>
 <script>
 window.requests=[];window.routes=[];window.folderFailure=false;
 window.changeTab=mine=>{
@@ -27,11 +33,16 @@ window.tingwuRequest=async request=>{
   }
   if(request.data.action==='getTransList'){
     const id=String(request.data.filter.dirId);
-    if(window.recordGates&&window.recordGates[id])await window.recordGates[id];
+    const key=id+':'+request.data.pageNo;
+    if(window.recordGates&&(window.recordGates[key]||window.recordGates[id]))await (window.recordGates[key]||window.recordGates[id]);
+    if(window.recordFailures&&window.recordFailures[key])throw new Error('temporary record failure');
     const rows=window.recordRows||({12:[{transId:'record-12',tag:{showName:'方案讨论'},status:0}],13:[{transId:'record-13',cardInfo:{tag:{showName:'周会记录'}},status:0}],20:[{transId:'record-20',tag:{showName:'课程笔记'},status:0}]})[id]||[];
     const filtered=rows.filter(row=>!request.data.filter.showName||row.tag.showName.includes(request.data.filter.showName));
-    const start=(request.data.pageNo-1)*request.data.pageSize;
-    return {data:{success:true,code:'0',data:filtered.slice(start,start+request.data.pageSize),total:filtered.length}};
+    const size=Math.min(request.data.pageSize,window.recordPageSize||request.data.pageSize);
+    const start=(request.data.pageNo-1)*size;
+    const data=window.recordPages?window.recordPages[request.data.pageNo]||[]:filtered.slice(start,start+size);
+    const counts=window.recordCounts===undefined?{total:filtered.length}:window.recordCounts;
+    return {data:Object.assign({success:true,code:'0',data},counts)};
   }
   throw new Error('Unexpected action: '+request.data.action);
 };

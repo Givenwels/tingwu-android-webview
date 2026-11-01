@@ -6,9 +6,9 @@ export const APP_CONFIG = {
   autoRedirect: true,
   redirectDelay: 1000,
   androidApkUrl:
-    'https://github.com/Givenwels/tingwu-android-webview/releases/download/v1.0.12/tingwu-v1.0.12-release.apk',
+    'https://github.com/Givenwels/tingwu-android-webview/releases/download/v1.0.13/tingwu-v1.0.13-release.apk',
   androidApkSize: '约 0.7 MB',
-  androidApkVersion: 'v1.0.12',
+  androidApkVersion: 'v1.0.13',
 }
 
 export type AppConfig = typeof APP_CONFIG
