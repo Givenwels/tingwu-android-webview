@@ -31,7 +31,6 @@ class BackgroundPlaybackService : Service() {
         fun onPlaybackUnavailable()
     }
     private lateinit var session: MediaSession
-    private lateinit var overlay: PlaybackOverlayController
     private val handler = Handler(Looper.getMainLooper())
     private var foreground = false
     private var wakeLock: PowerManager.WakeLock? = null
@@ -71,9 +70,6 @@ class BackgroundPlaybackService : Service() {
                 override fun onFastForward() = seekBy(15_000)
             }, handler)
         }
-        overlay = PlaybackOverlayController(this, {
-            if (latest.playing) command("pause") else requestPlay()
-        }, { runCatching { openIntent().send() } }, { command("stop") })
         ContextCompat.registerReceiver(this, screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
@@ -143,7 +139,6 @@ class BackgroundPlaybackService : Service() {
             notifiedKey = notificationKey
         }
         updateWakeLock()
-        updateOverlay()
     }
 
     private fun notification(): Notification {
@@ -186,19 +181,14 @@ class BackgroundPlaybackService : Service() {
             }
         }
     }
-    private fun updateOverlay() {
-        val info = latest
-        overlay.render(!appVisible && !overlaySuppressed && info.visible && getSharedPreferences("playback", MODE_PRIVATE).getBoolean("overlay_enabled", true),
-            info.playing, info.title, info.positionMs, info.durationMs)
-    }
-    private fun shutdown() { latest = PlaybackInfo(); overlay.dispose(); stopSelf() }
+    private fun shutdown() { latest = PlaybackInfo(); stopSelf() }
     override fun onTaskRemoved(rootIntent: Intent?) {
         controller?.get()?.onPlaybackCommand("stop"); shutdown(); super.onTaskRemoved(rootIntent)
     }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         wakeLock?.takeIf { it.isHeld }?.release(); wakeLock = null
-        overlay.dispose(); unregisterReceiver(screenReceiver); session.release()
+        unregisterReceiver(screenReceiver); session.release()
         stopForeground(STOP_FOREGROUND_REMOVE)
         getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         if (instance?.get() === this) instance = null
@@ -217,8 +207,6 @@ class BackgroundPlaybackService : Service() {
         private var instance: WeakReference<BackgroundPlaybackService>? = null
         private var controller: WeakReference<Controller>? = null
         private var latest = PlaybackInfo()
-        private var appVisible = true
-        private var overlaySuppressed = false
         fun update(context: Context, owner: Controller, info: PlaybackInfo) {
             controller = WeakReference(owner); latest = info
             val running = instance?.get()
@@ -228,8 +216,6 @@ class BackgroundPlaybackService : Service() {
                     Intent(context, BackgroundPlaybackService::class.java).setAction(ACTION_SYNC))
             } catch (_: RuntimeException) { owner.onPlaybackUnavailable(); stop(context) }
         }
-        fun setAppVisible(visible: Boolean) { appVisible = visible; instance?.get()?.updateOverlay() }
-        fun suppressOverlay(suppress: Boolean) { overlaySuppressed = suppress; instance?.get()?.updateOverlay() }
         fun stop(context: Context) {
             latest = PlaybackInfo(); controller = null
             context.stopService(Intent(context, BackgroundPlaybackService::class.java))

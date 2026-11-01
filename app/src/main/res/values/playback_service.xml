@@ -3,11 +3,4 @@
     <string name="playback_rewind">后退15秒</string>
     <string name="playback_forward">快进15秒</string>
     <string name="playback_unavailable">后台播放暂不可用，请返回播放页重试</string>
-    <string name="playback_overlay_title">悬浮播放控制</string>
-    <string name="playback_overlay_message">允许“显示在其他应用上方”后，切到其他应用时可用悬浮控件暂停或继续播放。仅在当前播放会话中显示，可随时关闭。以后可长按应用底部播放条更改此设置。</string>
-    <string name="playback_overlay_settings">去授权</string>
-    <string name="playback_overlay_later">暂不</string>
-    <string name="playback_overlay_disable">关闭悬浮控件</string>
-    <string name="playback_overlay_enable">开启悬浮控件</string>
-    <string name="playback_overlay_settings_unavailable">未找到悬浮窗权限设置入口，请到系统应用设置中开启</string>
 </resources>

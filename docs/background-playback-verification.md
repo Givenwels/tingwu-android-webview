@@ -5,6 +5,8 @@
 - 官网 H5 的 `window.uni` 没有公开导航方法。直接更改记录编号所在的 hash 会复用第一次打开的 Result 页面及音频。文件夹列表改用官网 My 卡片的 `StaticItem.toResult`，让官网创建对应页面状态；浏览器返回时等待布局和历史滚动恢复完成，再还原文件夹滚动位置。
 - 官网 AudioPlayer 的 `toggleRevive('pause')` 会在页面隐藏时暂停底层音频。兼容脚本只调整此生命周期策略，保留真实 `document.hidden`、焦点和可见性事件。原生控制通过限定官网来源的消息通道调用同一个播放器，Android 媒体会话不播放任何额外音频。
 
+1.0.15 移除与系统顶部媒体面板重复的应用悬浮条、悬浮授权提示和 `SYSTEM_ALERT_WINDOW` 声明。系统 MediaSession、MediaStyle、播放控制回调及息屏播放策略沿用1.0.14；用户已确认其小米手机的顶部“听”能够展开系统播放面板，因此无需再创建另一套跨应用界面。
+
 默认离线检查：
 
 ```powershell
@@ -28,8 +30,8 @@ node scripts/prepare-official-playback.cjs <cached-index.js> <cached-Result.js> 
 .\gradlew.bat -p scripts/release-harness '-PtingwuRecorderTestAssets=<temporary-assets-directory>' assembleDebug --no-daemon
 ```
 
-`PlaybackBackgroundTest` 必须在隔离模拟器中运行：先安装同证书正式包与独立测试 APK，撤销麦克风、普通通知权限。三个主用例在已授予悬浮窗 app-op 的状态下运行，验证真实息屏70秒、悬浮条暂停/继续、锁屏媒体会话暂停/继续/拖动、返回按钮实际点击和 SPA 消息通道。`overlayDenialLeavesMediaSessionControlsUsable` 则单独在悬浮窗 app-op 为 deny 时运行，确认授权可拒绝且媒体会话仍然可用。测试会本地播放静音 WAV，不启用主机麦克风。
+`PlaybackBackgroundTest` 必须在隔离模拟器中运行：先安装同证书正式包与独立测试 APK，撤销麦克风、普通通知权限，不授予悬浮权限。五个用例验证：保留旧悬浮设置时没有第二条跨应用控件，系统媒体面板实际按钮能暂停/继续同一个官网播放器，真实息屏70秒及锁屏媒体会话控制，返回按钮实际点击，以及 SPA 消息通道。测试本地播放静音 WAV，不启用主机麦克风。模拟器没有小米系统超级岛，不能替代小米真机验证其展开动画与系统外观。
 
 录音回归仍使用 `RecordingMicrophoneTest`、`RecordingReturnTest`、`RecordingBackgroundTest`，检查系统授权、官网实际 Opus 编码、结束返回及息屏采音。所有权限操作和应用数据准备只针对模拟器包，不能对用户真机执行清除数据或撤销权限。
 
-系统文档：[媒体前台服务](https://developer.android.com/develop/background-work/services/fgs/service-types)、[通知权限与媒体会话豁免](https://developer.android.com/develop/ui/compose/notifications/notification-permission)。跨应用悬浮条需要用户单独授予“显示在其他应用上方”；本项目不承诺厂商系统灵动岛兼容性或安全中心认证。
+系统文档：[媒体前台服务](https://developer.android.com/develop/background-work/services/fgs/service-types)、[通知权限与媒体会话豁免](https://developer.android.com/develop/ui/compose/notifications/notification-permission)、[小米媒体通知适配](https://dev.mi.com/xiaomihyperos/documentation/detail?pId=2161)。系统岛的外观与展开手势由手机系统提供，本项目不另绘跨应用“灵动岛”，也不申请其悬浮权限。

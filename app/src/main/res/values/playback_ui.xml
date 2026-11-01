@@ -9,9 +9,6 @@
     <string name="playback_ui_unknown_duration">--:--</string>
     <string name="playback_ui_time_description">已播放 %1$s，共 %2$s</string>
     <string name="playback_ui_time_unknown_description">已播放 %1$s，时长未知</string>
-    <string name="playback_ui_floating_window_title">通义听悟悬浮播放</string>
-    <string name="playback_ui_floating_open">打开播放详情：%1$s，%2$s。拖动标题可移动播放条</string>
-    <string name="playback_ui_floating_close">停止并关闭播放</string>
 
     <color name="playback_ui_surface">#211A31</color>
     <color name="playback_ui_border">#756293</color>

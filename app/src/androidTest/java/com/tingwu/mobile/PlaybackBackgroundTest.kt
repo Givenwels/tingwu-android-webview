@@ -13,7 +13,6 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.PowerManager
 import android.os.SystemClock
-import android.provider.Settings
 import android.util.Log
 import android.view.WindowInsets
 import android.webkit.WebResourceRequest
@@ -36,28 +35,34 @@ import java.nio.ByteOrder
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 /** Emulator only; revoke RECORD_AUDIO and POST_NOTIFICATIONS before running this class. */
 @RunWith(AndroidJUnit4::class)
 class PlaybackBackgroundTest {
-    @Test fun overlayDenialLeavesMediaSessionControlsUsable() = withPage(false) { _, view ->
+    @Test fun systemMediaControlsDoNotAddASecondFloatingPlayer() = withPage(false) { _, view ->
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val target = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
-        assertFalse("Run this test with the emulator overlay app-op denied", Settings.canDrawOverlays(target))
-        target.getSharedPreferences("playback", Activity.MODE_PRIVATE).edit().putBoolean("overlay_requested", false).commit()
+        // Simulate an upgrade with the old floating-player preference still enabled.
+        target.getSharedPreferences("playback", Activity.MODE_PRIVATE).edit()
+            .putBoolean("overlay_enabled", true).putBoolean("overlay_requested", true).commit()
         device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
-        device.wait(Until.findObject(By.text("暂不")), 5_000)?.click() ?: error("Overlay authorization must be optional")
         val controller = awaitMediaController()
         device.pressHome()
-        assertFalse("Overlay denial was ignored", device.wait(Until.hasObject(By.res(target.packageName, "floating_playback_toggle")), 1_000))
-        assertEquals("The website paused after overlay denial", "false", js(view, "player.innerAudioContext.paused"))
+        assertFalse("A second floating player duplicates the system media panel",
+            device.wait(Until.hasObject(By.res(target.packageName, "floating_playback_toggle")), 1_000))
+        assertFalse("Playback still requests floating-window authorization", device.hasObject(By.text("悬浮播放控制")))
+        @Suppress("DEPRECATION")
+        val permissions = target.packageManager.getPackageInfo(target.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty()
+        assertFalse("System media controls must not require overlay permission", permissions.contains(Manifest.permission.SYSTEM_ALERT_WINDOW))
+        assertEquals("The website paused in the background", "false", js(view, "player.innerAudioContext.paused"))
         controller.transportControls.pause()
-        awaitCondition("Media-session pause failed without overlay authorization") {
+        awaitCondition("System media-session pause failed") {
             js(view, "player.innerAudioContext.paused && !player.playing") == "true" && !isForeground()
         }
         controller.transportControls.play()
-        awaitCondition("Media-session resume failed without overlay authorization") {
+        awaitCondition("System media-session resume failed") {
             js(view, "!player.innerAudioContext.paused && player.playing") == "true" && isForeground()
         }
         controller.transportControls.stop()
@@ -83,7 +88,32 @@ class PlaybackBackgroundTest {
         awaitCondition("A real tap did not reach the web back button") { js(view, "window.backClicked") == "true" }
     }
 
-    @Test fun playbackSurvivesScreenOffAndSupportsOverlayAndLockScreenControls() = withPage(false) { scenario, view ->
+    @Test fun systemNotificationButtonsControlTheSameWebPlayer() = withPage(false) { _, view ->
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
+        val controller = awaitMediaController()
+        device.pressHome()
+        device.openQuickSettings()
+        val pause = device.wait(Until.findObject(By.pkg("com.android.systemui")
+            .desc(Pattern.compile("Pause|暂停|暂停播放"))), 8_000)
+        if (pause == null) { screenshot("system-media-missing.png"); error("System media pause control did not appear") }
+        pause.click()
+        awaitCondition("The system media pause button did not pause the official player") {
+            js(view, "player.innerAudioContext.paused && !player.playing") == "true" && !isForeground()
+        }
+        val play = device.wait(Until.findObject(By.pkg("com.android.systemui")
+            .desc(Pattern.compile("Play|Resume|播放|继续播放"))), 5_000) ?: error("System media resume control did not appear")
+        play.click()
+        awaitCondition("The system media resume button did not resume the official player") {
+            js(view, "!player.innerAudioContext.paused && player.playing") == "true" && isForeground()
+        }
+        screenshot("system-media-panel.png")
+        device.pressHome()
+        controller.transportControls.stop()
+        awaitCondition("System media stop did not release playback") { !isForeground() }
+    }
+
+    @Test fun playbackSurvivesScreenOffAndSupportsSystemMediaControls() = withPage(false) { scenario, view ->
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val target = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
@@ -91,7 +121,6 @@ class PlaybackBackgroundTest {
             target.checkSelfPermission(Manifest.permission.RECORD_AUDIO))
         assertEquals("This run verifies media notifications with notification permission denied", PackageManager.PERMISSION_DENIED,
             target.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
-        assertTrue("Grant the emulator overlay app-op before this test", Settings.canDrawOverlays(target))
         device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
         awaitCondition("The local audio did not begin") { js(view, "player.innerAudioContext.currentTime > 0.1") == "true" }
         var controller: MediaController? = null
@@ -104,22 +133,15 @@ class PlaybackBackgroundTest {
         }
         val controls = checkNotNull(controller).transportControls
         device.pressHome()
-        val pause = device.wait(Until.findObject(By.pkg(target.packageName).desc("暂停播放")), 8_000)
-            ?: error("Floating playback controls did not appear over the launcher")
-        val title = device.findObject(By.res(target.packageName, "floating_playback_open")) ?: error("Overlay drag handle is inaccessible")
-        device.swipe(title.visibleCenter.x, title.visibleCenter.y, device.displayWidth - 1, device.displayHeight - 1, 15)
-        val overlayRoot = device.findObject(By.res(target.packageName, "floating_playback_open")).parent.visibleBounds
-        assertTrue("Dragging moved the capsule outside the usable display", overlayRoot.left >= 0 && overlayRoot.top > 0 &&
-            overlayRoot.right <= device.displayWidth && overlayRoot.bottom <= device.displayHeight)
-        screenshot("playback-overlay.png")
-        pause.click()
-        awaitCondition("The floating pause button did not pause the real player") {
+        assertFalse("A second floating player covers other apps",
+            device.wait(Until.hasObject(By.res(target.packageName, "floating_playback_toggle")), 1_000))
+        controls.pause()
+        awaitCondition("System media pause did not pause the real player") {
             js(view, "player.innerAudioContext.paused && !player.playing") == "true"
         }
         awaitCondition("A paused player left a foreground playback service") { !isForeground() }
-        device.wait(Until.findObject(By.pkg(target.packageName).desc("继续播放")), 5_000)?.click()
-            ?: error("The floating play button is inaccessible")
-        awaitCondition("Floating resume did not restart the actual audio") {
+        controls.play()
+        awaitCondition("System media resume did not restart the actual audio") {
             js(view, "!player.innerAudioContext.paused && player.playing") == "true" && isForeground()
         }
         val before = js(view, "player.innerAudioContext.currentTime").toDouble()
@@ -158,7 +180,7 @@ class PlaybackBackgroundTest {
         awaitCondition("Stop left audio or a foreground media service") {
             js(view, "player.innerAudioContext.paused") == "true" && !isForeground()
         }
-        Log.i("TingwuRecorderTest", "SCREEN_OFF_PLAYBACK before=$before after=$after microphonePermission=denied notificationPermission=denied overlayAndMediaControls=passed")
+        Log.i("TingwuRecorderTest", "SCREEN_OFF_PLAYBACK before=$before after=$after microphonePermission=denied notificationPermission=denied systemMediaControls=passed extraOverlay=absent")
     }
 
     private fun awaitMediaController(): MediaController {
