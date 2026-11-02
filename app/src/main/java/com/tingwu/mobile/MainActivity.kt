@@ -606,16 +606,19 @@ class MainActivity : AppCompatActivity(), BackgroundPlaybackService.Controller {
         channel.postMessage(WebMessage(command))
     }
 
-    override fun onPlaybackUnavailable() {
+    override fun onPlaybackUnavailable(notifyUser: Boolean) {
         if (isDestroyed || isFinishing) return
         onPlaybackCommand("pause")
-        Toast.makeText(this, R.string.playback_unavailable, Toast.LENGTH_LONG).show()
+        if (notifyUser || lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            Toast.makeText(this, R.string.playback_unavailable, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun updatePlayback(data: String?) {
         val info = PlaybackInfo.parse(data) ?: return
         playbackInfo = info
-        BackgroundPlaybackService.update(this, this, info)
+        BackgroundPlaybackService.update(this, this, info,
+            restorePaused = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             renderPlayback()
         }

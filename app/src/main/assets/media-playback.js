@@ -91,6 +91,11 @@
     watched.add(media);
     events.forEach(event => media.addEventListener(event, () => {
       if (event === 'playing') currentMedia = media;
+      // Audio-focus interruptions pause Chromium's audio directly, bypassing the
+      // website's pause() method. Keep its reactive button state tied to real audio.
+      const player = owners.get(media);
+      const actuallyPlaying = !media.paused && !media.ended && !media.error;
+      if (player && player.playing !== actuallyPlaying) player.playing = actuallyPlaying;
       if (event === 'timeupdate') {
         const now = Date.now();
         if (!controlsEnabled || now - lastProgressAt < (document.hidden ? 5000 : 1000)) return;

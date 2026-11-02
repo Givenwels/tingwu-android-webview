@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="false" android:label="Tingwu isolated release test" android:testOnly="true" />
+    <application android:allowBackup="false" android:label="Tingwu isolated release test" android:testOnly="true">
+        <activity android:name="com.tingwu.harness.VideoInterruptionActivity" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
     <instrumentation
         android:name="androidx.test.runner.AndroidJUnitRunner"
         android:targetPackage="com.tingwu.mobile"

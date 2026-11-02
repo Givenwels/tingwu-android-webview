@@ -10,8 +10,8 @@ android {
         applicationId = "com.tingwu.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.0.15"
+        versionCode = 17
+        versionName = "1.0.16"
 
         buildConfigField("String", "TINGWU_URL", "\"https://tingwu.aliyun.com/\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

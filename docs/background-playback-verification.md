@@ -7,6 +7,8 @@
 
 1.0.15 移除与系统顶部媒体面板重复的应用悬浮条、悬浮授权提示和 `SYSTEM_ALERT_WINDOW` 声明。系统 MediaSession、MediaStyle、播放控制回调及息屏播放策略沿用1.0.14；用户已确认其小米手机的顶部“听”能够展开系统播放面板，因此无需再创建另一套跨应用界面。
 
+1.0.16 处理外部视频打断后的恢复：Chromium 可直接暂停 HTMLAudioElement，而官网 AudioPlayer 的 onPause 只发事件，不更新自己的 playing 字段。兼容脚本现在让官网按钮跟随真实音频状态。原生恢复异常或超时后保留暂停会话；界面重新可用时可以恢复被关闭的暂停服务，不自动开始播放。正常暂停继续释放前台状态与唤醒锁。
+
 默认离线检查：
 
 ```powershell
@@ -30,7 +32,15 @@ node scripts/prepare-official-playback.cjs <cached-index.js> <cached-Result.js> 
 .\gradlew.bat -p scripts/release-harness '-PtingwuRecorderTestAssets=<temporary-assets-directory>' assembleDebug --no-daemon
 ```
 
-`PlaybackBackgroundTest` 必须在隔离模拟器中运行：先安装同证书正式包与独立测试 APK，撤销麦克风、普通通知权限，不授予悬浮权限。五个用例验证：保留旧悬浮设置时没有第二条跨应用控件，系统媒体面板实际按钮能暂停/继续同一个官网播放器，真实息屏70秒及锁屏媒体会话控制，返回按钮实际点击，以及 SPA 消息通道。测试本地播放静音 WAV，不启用主机麦克风。模拟器没有小米系统超级岛，不能替代小米真机验证其展开动画与系统外观。
+`PlaybackBackgroundTest` 必须在隔离模拟器中运行：先安装同证书正式包与独立测试 APK，撤销麦克风、普通通知权限，不授予悬浮权限。基础用例覆盖旧悬浮设置不会创建第二条控件、系统面板真实按钮、息屏70秒与锁屏控制、返回按钮和 SPA 消息通道。外部视频用例从另一个应用 UID 启动真实 VideoView，测试永久和临时音频焦点打断后的手动/后台恢复；故障注入用例验证后台提升被拒绝后仍可重试，以及暂停服务被停止后返回应用的恢复。测试不启用主机麦克风。模拟器没有小米系统超级岛，不能替代真机验证其展开动画或小红书的具体系统策略。
+
+外部视频用例还需要把 AndroidX 的公开测试视频放进临时测试素材目录；文件不进入正式 APK 或仓库：
+
+```powershell
+Invoke-WebRequest 'https://raw.githubusercontent.com/androidx/media/release/libraries/test_data/src/test/assets/media/mp4/sample.mp4' -OutFile '<temporary-assets-directory>/focus-video.mp4'
+```
+
+当前素材101,674字节，SHA-256为 `6AECD03E411743FEEC6E9D2BB0209ADA82F176AD45A4A44CBD2DF0EE8290C8F6`。独立测试应用通过 VideoView 请求音频焦点，不登录任何视频平台账号。`START_FOREGROUND deny` 只用于模拟器故障注入，并在 finally 中恢复 default；它证明了失败处理路径，不能据此断言用户小米设备抛出的实际异常类型。
 
 录音回归仍使用 `RecordingMicrophoneTest`、`RecordingReturnTest`、`RecordingBackgroundTest`，检查系统授权、官网实际 Opus 编码、结束返回及息屏采音。所有权限操作和应用数据准备只针对模拟器包，不能对用户真机执行清除数据或撤销权限。
 

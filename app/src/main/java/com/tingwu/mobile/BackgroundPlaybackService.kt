@@ -21,6 +21,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import java.lang.ref.WeakReference
 
@@ -28,7 +29,7 @@ import java.lang.ref.WeakReference
 class BackgroundPlaybackService : Service() {
     interface Controller {
         fun onPlaybackCommand(command: String)
-        fun onPlaybackUnavailable()
+        fun onPlaybackUnavailable(notifyUser: Boolean)
     }
     private lateinit var session: MediaSession
     private val handler = Handler(Looper.getMainLooper())
@@ -37,7 +38,10 @@ class BackgroundPlaybackService : Service() {
     private var notifiedKey = ""
     private var metadataKey = ""
     private val startTimeout = Runnable {
-        if (!latest.playing) { controller?.get()?.onPlaybackUnavailable(); shutdown() }
+        if (!latest.playing) {
+            Log.w("TingwuPlayback", "Playback resume timed out; retaining paused controls")
+            retainPausedSession(notifyUser = true)
+        }
     }
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = updateWakeLock()
@@ -78,7 +82,7 @@ class BackgroundPlaybackService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (controller?.get() == null || !latest.visible) { shutdown(); return START_NOT_STICKY }
         try {
-            if (!foreground) promote()
+            if (!foreground && (intent?.action != ACTION_RESTORE_PAUSED || latest.playing || latest.status == "buffering")) promote()
             when (intent?.action) {
                 ACTION_PLAY -> requestPlay()
                 ACTION_PAUSE -> command("pause")
@@ -87,7 +91,10 @@ class BackgroundPlaybackService : Service() {
                 ACTION_FORWARD -> seekBy(15_000)
                 else -> applyState()
             }
-        } catch (_: RuntimeException) { controller?.get()?.onPlaybackUnavailable(); shutdown() }
+        } catch (error: RuntimeException) {
+            Log.w("TingwuPlayback", "Playback service command failed", error)
+            retainPausedSession(notifyUser = intent?.action == ACTION_PLAY)
+        }
         return START_NOT_STICKY
     }
 
@@ -102,10 +109,23 @@ class BackgroundPlaybackService : Service() {
             handler.removeCallbacks(startTimeout)
             handler.postDelayed(startTimeout, 15_000)
             command("play")
-        } catch (_: RuntimeException) { controller?.get()?.onPlaybackUnavailable(); shutdown() }
+        } catch (error: RuntimeException) {
+            Log.w("TingwuPlayback", "Playback service resume failed", error)
+            retainPausedSession(notifyUser = true)
+        }
     }
     private fun seekBy(delta: Long) = command("seek:${(latest.positionMs + delta).coerceIn(0,
         latest.durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE)}")
+
+    private fun retainPausedSession(notifyUser: Boolean) {
+        handler.removeCallbacks(startTimeout)
+        latest = latest.copy(status = "paused")
+        controller?.get()?.onPlaybackUnavailable(notifyUser)
+        // A failed promotion must not destroy the recording or its resume controls.
+        // Republish once in case the system also removed the previous notification.
+        notifiedKey = ""
+        applyState()
+    }
 
     private fun applyState() {
         val info = latest
@@ -199,6 +219,7 @@ class BackgroundPlaybackService : Service() {
         private const val CHANNEL_ID = "background_playback"
         private const val NOTIFICATION_ID = 1001
         private const val ACTION_SYNC = "com.tingwu.mobile.playback.SYNC"
+        private const val ACTION_RESTORE_PAUSED = "com.tingwu.mobile.playback.RESTORE_PAUSED"
         private const val ACTION_PLAY = "com.tingwu.mobile.playback.PLAY"
         private const val ACTION_PAUSE = "com.tingwu.mobile.playback.PAUSE"
         private const val ACTION_STOP = "com.tingwu.mobile.playback.STOP"
@@ -207,14 +228,23 @@ class BackgroundPlaybackService : Service() {
         private var instance: WeakReference<BackgroundPlaybackService>? = null
         private var controller: WeakReference<Controller>? = null
         private var latest = PlaybackInfo()
-        fun update(context: Context, owner: Controller, info: PlaybackInfo) {
+        fun update(context: Context, owner: Controller, info: PlaybackInfo, restorePaused: Boolean = false) {
             controller = WeakReference(owner); latest = info
             val running = instance?.get()
             try {
                 if (running != null) running.applyState()
                 else if (info.playing || info.status == "buffering") context.startForegroundService(
                     Intent(context, BackgroundPlaybackService::class.java).setAction(ACTION_SYNC))
-            } catch (_: RuntimeException) { owner.onPlaybackUnavailable(); stop(context) }
+                else if (restorePaused && info.status == "paused") context.startService(
+                    Intent(context, BackgroundPlaybackService::class.java).setAction(ACTION_RESTORE_PAUSED))
+            } catch (error: RuntimeException) {
+                Log.w("TingwuPlayback", "Playback state update failed: ${info.status}", error)
+                if (running != null) running.retainPausedSession(notifyUser = false)
+                else {
+                    latest = info.copy(status = "paused")
+                    owner.onPlaybackUnavailable(notifyUser = false)
+                }
+            }
         }
         fun stop(context: Context) {
             latest = PlaybackInfo(); controller = null

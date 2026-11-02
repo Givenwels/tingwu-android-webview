@@ -40,6 +40,121 @@ import java.util.regex.Pattern
 /** Emulator only; revoke RECORD_AUDIO and POST_NOTIFICATIONS before running this class. */
 @RunWith(AndroidJUnit4::class)
 class PlaybackBackgroundTest {
+    @Test fun returningToTheAppRestoresAPausedSessionIfItsServiceWasStopped() = withPage(false) { _, view ->
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
+        val controller = awaitMediaController()
+        val open = checkNotNull(controller.sessionActivity)
+        controller.transportControls.pause()
+        awaitCondition("Pause did not settle") { !isForeground() && js(view, "player.innerAudioContext.paused") == "true" }
+        device.pressHome()
+        target.stopService(Intent().setClassName(target.packageName, "com.tingwu.mobile.BackgroundPlaybackService"))
+        awaitCondition("The stopped service retained its notification") {
+            target.getSystemService(NotificationManager::class.java).activeNotifications.none { it.id == 1001 }
+        }
+        open.send()
+        val restored = awaitMediaController()
+        assertEquals("Returning should restore paused controls without starting audio", "true", js(view, "player.innerAudioContext.paused"))
+        assertEquals(PlaybackState.STATE_PAUSED, restored.playbackState?.state)
+        restored.transportControls.play()
+        awaitCondition("The restored session cannot continue the same recording") {
+            js(view, "!player.innerAudioContext.paused&&player.playing") == "true" && isForeground()
+        }
+        restored.transportControls.stop()
+    }
+
+    @Test fun aRejectedBackgroundResumeKeepsPausedControlsForRetry() = withPage(false) { _, view ->
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
+        val controller = awaitMediaController()
+        awaitCondition("Initial playback did not start") { js(view, "player.innerAudioContext.currentTime>0.2") == "true" }
+        controller.transportControls.pause()
+        awaitCondition("Initial pause did not settle") { !isForeground() && js(view, "player.innerAudioContext.paused") == "true" }
+        device.pressHome()
+        try {
+            // Fault injection: reproduce the platform rejecting foreground promotion.
+            device.executeShellCommand("appops set ${target.packageName} START_FOREGROUND deny")
+            controller.transportControls.play()
+            SystemClock.sleep(1_000)
+            assertTrue("A rejected resume deleted the record's playback controls",
+                target.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == 1001 })
+            assertEquals("The failed background resume must remain paused", "true", js(view, "player.innerAudioContext.paused"))
+            assertFalse("A failed resume retained foreground playback", isForeground())
+            device.executeShellCommand("appops set ${target.packageName} START_FOREGROUND default")
+            controller.transportControls.play()
+            awaitCondition("Retry could not restore the same recording and media panel") {
+                js(view, "!player.innerAudioContext.paused&&player.playing") == "true" && isForeground() &&
+                    target.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == 1001 }
+            }
+            controller.transportControls.stop()
+        } finally {
+            device.executeShellCommand("appops set ${target.packageName} START_FOREGROUND default")
+        }
+    }
+
+    @Test fun aTransientVideoCanReturnAudioFocusWhileTingwuIsInTheBackground() = withPage(false) { _, view ->
+        val target = InstrumentationRegistry.getInstrumentation().targetContext
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
+        awaitMediaController()
+        awaitCondition("The initial audio did not start") { js(view, "player.innerAudioContext.currentTime>0.2") == "true" }
+        device.pressHome()
+        try {
+            target.startActivity(Intent().setClassName("com.tingwu.mobile.harness", "com.tingwu.harness.VideoInterruptionActivity")
+                .putExtra("focus_gain", android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            device.wait(Until.findObject(By.text("外部测试视频播放中")), 15_000) ?: error("The independent video did not start")
+            awaitCondition("Transient video focus did not pause Tingwu") { js(view, "player.innerAudioContext.paused") == "true" }
+            device.findObject(By.text("退出测试视频")).click()
+            awaitCondition("Audio-focus gain in the background did not restore playback and its media service") {
+                js(view, "!player.innerAudioContext.paused && player.playing") == "true" && isForeground()
+            }
+            assertTrue("The background playback panel disappeared after video",
+                target.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == 1001 })
+            awaitMediaController().transportControls.stop()
+        } finally {
+            target.startActivity(Intent().setClassName("com.tingwu.mobile.harness", "com.tingwu.harness.VideoInterruptionActivity")
+                .putExtra("close_video", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        }
+    }
+
+    @Test fun anExternalVideoPauseKeepsTheRecordResumable() = withPage(false) { _, view ->
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val target = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("Play control is inaccessible")
+        val controller = awaitMediaController()
+        awaitCondition("The initial audio did not start") { js(view, "player.innerAudioContext.currentTime>0.2") == "true" }
+        device.pressHome()
+        try {
+        target.startActivity(Intent().setClassName("com.tingwu.mobile.harness", "com.tingwu.harness.VideoInterruptionActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        device.wait(Until.findObject(By.text("外部测试视频播放中")), 15_000) ?: error("The independent video did not start")
+        awaitCondition("The external video did not pause Tingwu audio") { js(view, "player.innerAudioContext.paused") == "true" }
+        Log.i("TingwuFocusTest", "INTERRUPTED ${js(view, "JSON.stringify({paused:player.innerAudioContext.paused,playing:player.playing,time:player.innerAudioContext.currentTime})")} nativeState=${controller.playbackState?.state}")
+        assertEquals("An external pause left the webpage button claiming it was still playing", "false", js(view, "player.playing"))
+        awaitCondition("The interrupted record lost its resumable media session") { controller.playbackState?.state == PlaybackState.STATE_PAUSED }
+        device.findObject(By.text("退出测试视频")).click()
+        val notification = target.getSystemService(NotificationManager::class.java).activeNotifications.firstOrNull { it.id == 1001 }
+            ?: error("The interrupted record's playback notification disappeared")
+        notification.notification.contentIntent.send()
+        device.wait(Until.findObject(By.text("播放本地音频")), 5_000)?.click() ?: error("One-tap resume is inaccessible")
+        awaitCondition("One-tap resume did not restart the record") {
+            js(view, "!player.innerAudioContext.paused&&player.playing") == "true" && isForeground()
+        }
+        device.pressHome()
+        awaitCondition("Resuming after video lost its media panel") {
+            controller.playbackState?.state == PlaybackState.STATE_PLAYING &&
+                target.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == 1001 }
+        }
+        controller.transportControls.stop()
+        } finally {
+            target.startActivity(Intent().setClassName("com.tingwu.mobile.harness", "com.tingwu.harness.VideoInterruptionActivity")
+                .putExtra("close_video", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        }
+    }
+
     @Test fun systemMediaControlsDoNotAddASecondFloatingPlayer() = withPage(false) { _, view ->
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val target = instrumentation.targetContext

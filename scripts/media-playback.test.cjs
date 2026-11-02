@@ -255,6 +255,21 @@ test('native pause and resume update the official player and onShow respects an 
   assert.equal(native.snapshots().at(-1).status, 'playing');
 });
 
+test('an external audio-focus pause updates the webpage control and does not resume onShow', async () => {
+  const f = fixture(0, { official: true });
+  const native = controls(f);
+  await f.player.play();
+  // Chromium pauses the audio element directly when another app takes audio focus.
+  f.audio.pause();
+  assert.equal(f.player.playing, false);
+  assert.equal(native.snapshots().at(-1).status, 'paused');
+  f.player.toggleRevive('play');
+  assert.equal(f.audio.paused, true);
+  native.send('play');
+  assert.equal(f.audio.paused, false);
+  assert.equal(f.player.playing, true);
+});
+
 test('native seek preserves pause, clamps to duration, and stop clears the session', async () => {
   const f = fixture(0, { official: true });
   const native = controls(f);

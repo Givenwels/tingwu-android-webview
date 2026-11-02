@@ -68,6 +68,12 @@ function silentWave(seconds = 90) {
     });
     await page.locator('.audioPlayer .action.play').click();
     await page.waitForFunction(() => window.testPlayer.innerAudioContext._audio.currentTime > 0.1);
+    await page.evaluate(() => window.testPlayer.innerAudioContext._audio.pause());
+    await page.waitForFunction(() => window.testPlayer.innerAudioContext.paused);
+    assert.equal(await page.evaluate(() => window.testPlayer.playing), false,
+      'An external/system pause must update the deployed AudioPlayer button state');
+    await page.locator('.audioPlayer .action.play').click();
+    await page.waitForFunction(() => !window.testPlayer.innerAudioContext.paused);
     // Only this test simulates visibility. Production must never forge visibility or focus.
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
