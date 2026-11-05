@@ -10,8 +10,8 @@ android {
         applicationId = "com.tingwu.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.0.17"
+        versionCode = 19
+        versionName = "1.0.18"
 
         buildConfigField("String", "TINGWU_URL", "\"https://tingwu.aliyun.com/\"")
         manifestPlaceholders["xiaomiXmsAppId"] = providers.gradleProperty("tingwuXiaomiAppId")

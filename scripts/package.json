@@ -2,12 +2,13 @@
   "name": "tingwu-browser-regressions",
   "private": true,
   "scripts": {
-    "test": "node --test media-playback.test.cjs mobile-recording.test.cjs mobile-library.test.cjs script-compatibility.test.cjs",
+    "test": "node --test media-playback.test.cjs mobile-recording.test.cjs mobile-library.test.cjs task-progress.test.cjs script-compatibility.test.cjs",
     "test:official-prestart": "node check-official-prestart.cjs",
     "test:official-active": "node check-official-active.cjs",
     "test:official-library": "node check-official-library.cjs",
     "test:official-navigation": "node --test check-official-library-navigation.cjs",
-    "test:official-playback": "node check-official-playback.cjs"
+    "test:official-playback": "node check-official-playback.cjs",
+    "test:official-tasks": "node check-official-task-progress.cjs"
   },
   "devDependencies": {
     "playwright-core": "1.56.1",

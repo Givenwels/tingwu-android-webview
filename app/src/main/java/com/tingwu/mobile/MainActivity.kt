@@ -67,7 +67,8 @@ class MainActivity : AppCompatActivity(), BackgroundPlaybackService.Controller {
         assets.open("mobile-library.js").bufferedReader().use { it.readText() }
     }
     private val mobilePageScript by lazy {
-        mobileRecordingEntryScript + "\n" + mobileLibraryScript + "\n" + mediaPlaybackScript
+        mobileRecordingEntryScript + "\n" + mobileLibraryScript + "\n" +
+            assets.open("task-progress.js").bufferedReader().use { it.readText() } + "\n" + mediaPlaybackScript
     }
 
     private val recordingLauncher =
