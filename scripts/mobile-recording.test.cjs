@@ -272,7 +272,7 @@ for (const width of [320, 390, 412]) {
             const box = document.querySelector(selector).getBoundingClientRect();
             return { x: box.x, right: box.right, y: box.y, bottom: box.bottom, height: box.height };
           };
-          return { title:rect('.meeting-title'), transcript:rect('.summary-area'), toolbar:rect('.top'),
+          return { title:rect('input#record_title'), transcript:rect('.summary-area'), toolbar:rect('.top'),
             text:rect('.summary-container'), controls:rect('.bottomContain'), notes:rect('.rightArea'),
             stop:rect('.stop-btn'), pause:rect('.play-btn') };
         });
@@ -300,3 +300,98 @@ for (const width of [320, 390, 412]) {
     } finally { await context.close(); }
   });
 }
+
+for (const width of [320, 390, 412]) {
+  test(`editable recording title is reachable, saved and does not collapse at ${width}px`, async () => {
+    const { context, page } = await pageFor(fixture('desktop-recorder-active.html'), { viewport: { width, height: 840 } });
+    try {
+      await page.addScriptTag({ content: asset('recorder-mobile.js') });
+      await page.waitForFunction(() => document.querySelector('.tingwu-mobile-recording'));
+      const input = page.locator('input#record_title');
+      const box = await input.boundingBox();
+      assert.ok(box && box.x >= 12 && box.x + box.width <= width - 12 && box.width >= width - 70 && box.height >= 44,
+        `editable title is clipped or too small: ${JSON.stringify(box)}`);
+      await page.getByRole('textbox', { name: '录音标题', exact: true }).fill('客户访谈 新的标题');
+      await input.press('Enter');
+      assert.equal(await page.evaluate(() => window.savedTitle), '客户访谈 新的标题');
+      assert.equal(await input.getAttribute('enterkeyhint'), 'done');
+    } finally { await context.close(); }
+  });
+
+  test(`transcript editor uses the card viewport instead of a second desktop viewport at ${width}px`, async () => {
+    const { context, page } = await pageFor(fixture('desktop-recorder-active.html'), { viewport: { width, height: 840 } });
+    try {
+      await page.evaluate(() => {
+        document.querySelector('.editor-scroll').append(...Array.from({ length: 20 }, (_, i) => {
+          const p = document.createElement('p'); p.textContent = `第${i + 1}段，实时转写内容完整显示。`; return p;
+        }));
+      });
+      await page.addScriptTag({ content: asset('recorder-mobile.js') });
+      await page.waitForFunction(() => document.querySelector('.tingwu-mobile-recording'));
+      const geometry = await page.evaluate(() => {
+        const box = selector => { const r = document.querySelector(selector).getBoundingClientRect(); return { x:r.x, right:r.right, height:r.height }; };
+        return { card:box('.summary-container'), editor:box('.editor-viewport'), scroll:box('.editor-scroll'),
+          outerOverflow:getComputedStyle(document.querySelector('.transcript-frame')).overflowY };
+      });
+      assert.ok(Math.abs(geometry.card.height - geometry.editor.height) <= 1, JSON.stringify(geometry));
+      assert.ok(geometry.editor.x >= geometry.card.x && geometry.editor.right <= geometry.card.right + 1, JSON.stringify(geometry));
+      assert.equal(geometry.outerOverflow, 'hidden', 'The adapter adds a redundant scrollbar around the editor');
+      await page.locator('.editor-scroll').evaluate(e => { e.scrollTop = e.scrollHeight; });
+      const last = page.locator('.editor-scroll p').last();
+      await last.scrollIntoViewIfNeeded();
+      assert.equal(await last.evaluate(e => { const r=e.getBoundingClientRect(); const v=e.parentElement.getBoundingClientRect(); return r.top>=v.top && r.bottom<=v.bottom; }), true);
+    } finally { await context.close(); }
+  });
+}
+
+test('native recording commands are idempotent and report actual microphone and recording metadata', async () => {
+  const { context, page } = await pageFor(fixture('desktop-recorder-active.html'));
+  try {
+    await page.addScriptTag({ content: asset('recorder-mobile.js') });
+    await page.evaluate(() => window.requestMic());
+    const latest = () => page.evaluate(() => window.messages.filter(m => m.type === 'recording-state').at(-1));
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.status === 'recording'));
+    assert.deepEqual(await latest(), { type:'recording-state', status:'recording', title:'2026-11-05 会议记录', elapsedMs:20000, networkUnstable:false });
+    await page.evaluate(() => window.postMessage('pause-recording', location.origin));
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.status === 'paused'));
+    await page.evaluate(() => window.postMessage('pause-recording', location.origin));
+    await page.waitForTimeout(50);
+    assert.equal(await page.evaluate(() => window.paused), true, 'Repeated pause must never toggle into recording');
+    await page.evaluate(() => window.postMessage('resume-recording', location.origin));
+    await page.waitForFunction(() => window.stream.getAudioTracks()[0].readyState === 'live');
+    await page.evaluate(() => window.postMessage('resume-recording', location.origin));
+    await page.waitForTimeout(50);
+    assert.equal((await latest()).status, 'recording');
+    await page.locator('#record_title').fill('改名后同步到通知');
+    await page.locator('#record_title').press('Enter');
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.title === '改名后同步到通知'));
+    await page.locator('.stop-btn').click();
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.status === 'stopped'));
+  } finally { await context.close(); }
+});
+
+test('recoverable transcription network warnings do not report the microphone as paused', async () => {
+  const { context, page } = await pageFor(fixture('desktop-recorder-active.html'));
+  try {
+    await page.addScriptTag({ content: asset('recorder-mobile.js') });
+    await page.evaluate(() => window.requestMic());
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.status === 'recording'));
+    await page.evaluate(() => {
+      const warning = document.createElement('div');
+      warning.className = 'ant-message-notice-content';
+      warning.textContent = '网络连接不稳定，暂停转写，音频持续录制中';
+      document.body.append(warning);
+    });
+    await page.waitForFunction(() => window.messages.some(m => m.type === 'recording-state' && m.networkUnstable));
+    assert.equal(await page.evaluate(() => window.messages.filter(m => m.type === 'recording-state').at(-1).status), 'recording');
+    await page.evaluate(() => document.querySelector('.ant-message-notice-content').remove());
+    await page.waitForTimeout(50);
+    assert.equal(await page.evaluate(() => window.messages.filter(m => m.type === 'recording-state').at(-1).networkUnstable), true);
+    await page.evaluate(() => {
+      const notice = document.createElement('div'); notice.className = 'ant-message-notice-content';
+      notice.textContent = '网络已恢复，录制音频转写中'; document.body.append(notice);
+    });
+    await page.waitForFunction(() => window.messages.filter(m => m.type === 'recording-state').at(-1).networkUnstable === false);
+    await page.evaluate(() => window.stream.getTracks().forEach(t => t.stop()));
+  } finally { await context.close(); }
+});

@@ -16,6 +16,12 @@
     .titleContain { width:calc(45vw - 347px); display:flex; }
     .meeting-title-shell { display:flex; align-items:center; }
     .meeting-title { font-size:18px; font-weight:600; max-width:30vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    /* CdJi, the editable title actually used during recording (not ytgv's readonly label). */
+    .file-title { margin:10px 26px 0 -14px; width:0; min-width:200px; flex:1; }
+    .file-title-input { display:inline-block; position:relative; max-width:100%; }
+    .file-title-field { height:28px; display:flex; align-items:center; border:1px solid transparent; }
+    #record_title { background:none; border:0; height:100%; padding:0 8px; font:600 16px sans-serif; }
+    .saveText { font-size:12px; color:#939596; white-space:nowrap; }
     .save-message { position:absolute; top:55px; margin-top:-13px; font-size:12px; color:#939596; }
     .leftContain { position:absolute; left:0; width:80px; height:100%; }
     .desktop-record > .content { width:calc(100% - 80px); margin:0 auto; margin-left:80px; height:0; flex-grow:1; display:flex; position:relative; }
@@ -24,6 +30,8 @@
     .summary-container { width:0; flex-grow:1; display:flex; flex-direction:column; position:relative; overflow:hidden; margin:0 auto; }
     .transcript-frame { height:0; flex-grow:1; position:relative; overflow:hidden; }
     .container { padding:0 20px; }
+    .editor-viewport { height:calc(100vh - 197px); width:calc(100% + 49px); margin-left:-22px; overflow:hidden; }
+    .editor-scroll { height:100%; overflow:auto; padding:0 16px; }
     .top { display:flex; height:36px; position:absolute; top:-60px; right:25px; z-index:3; }
     .top-button { width:36px; height:36px; margin-left:16px; display:flex; align-items:center; justify-content:center; float:left; }
     .record-control-frame { height:107px; display:flex; align-items:center; }
@@ -44,12 +52,12 @@
 </head>
 <body>
   <div id="root"><nav>电脑工作台</nav><div class="desktop-record">
-    <div class="desktop-topbar"><div class="viewport"><div class="left-area"><div class="titleContain"><div class="meeting-title-shell"><div class="meeting-title">2026-11-01 13:25 记录</div></div><div class="save-message">已保存</div></div></div></div></div>
+    <div class="desktop-topbar"><div class="viewport"><div class="left-area"><div class="titleContain"><div class="file-title"><div class="file-title-input"><div class="file-title-field"><input id="record_title" type="text" value="2026-11-05 会议记录" onblur="window.savedTitle=this.value.trim()" onkeydown="if(event.key==='Enter')this.blur()"></div></div><div class="FileTitle--Bottom"><span class="saveText">已保存</span></div></div></div></div></div></div>
     <div class="leftContain"><div class="backBox">返回</div></div>
     <div class="content"><div class="left-area">
       <div class="summary-area">
         <div class="top"><div class="top-button" data-e2e-test-id="record_search_icon">搜索</div><div class="top-button">筛选</div><div class="top-button">翻译</div><div class="top-button">热词</div></div>
-        <div class="summary-container"><div class="transcript-frame"><div class="container"><p>00:00　发言人 1</p><p>会议内容会在这里实时转写。每一段文字都应在手机屏幕内完整展示，不需要左右拖动。</p><p>00:08　发言人 2</p><p>转写、录音控制和会议笔记应依次排列，互不遮挡。</p></div></div></div>
+        <div class="summary-container"><div class="transcript-frame"><div class="container"><div class="editor-viewport"><div class="editor-scroll"><p>00:00　发言人 1</p><p>会议内容会在这里实时转写。每一段文字都应在手机屏幕内完整展示，不需要左右拖动。</p><p>00:08　发言人 2</p><p>转写、录音控制和会议笔记应依次排列，互不遮挡。</p></div></div></div></div></div>
       </div>
       <div class="record-control-frame"><div class="bottomContain"><div class="content"><div class="ball">听悟</div><div class="running-text"><span>录音中…</span></div><div class="running-time">00:20 / 02:00:00</div></div><div class="right-btn"><div class="stop-btn" data-e2e-test-id="record_finish_icon" onclick="finishRecord()">结束</div><a class="play-btn" data-e2e-test-id="record_stop_icon" onclick="togglePause()">暂停</a></div></div></div>
     </div><div class="rightArea"><div class="notes-editor"><div class="notes-toolbar">正文　11　 B　 A　···</div><div class="notes-body" contenteditable="true">会议笔记</div><div class="notes-footer">万语千言，心领神悟</div></div></div></div>
@@ -57,12 +65,15 @@
   <script>
     history.replaceState({}, '', '/doc/record');
     window.messages=[];
-    window.TingwuRecorder={postMessage:message=>window.messages.push(JSON.parse(message))};
+    if(!window.TingwuRecorder) window.TingwuRecorder={postMessage:message=>window.messages.push(JSON.parse(message))};
     window.requestMic=async()=>{window.stream=await navigator.mediaDevices.getUserMedia({audio:true});};
     window.togglePause=()=>{
       window.paused=!window.paused;
       document.querySelector('.running-text span').textContent=window.paused?'录音已暂停':'录音中…';
-      document.querySelector('.play-btn').textContent=window.paused?'继续':'暂停';
+      const button=document.querySelector('.play-btn');
+      button.textContent=window.paused?'继续':'暂停';
+      if(window.paused){button.removeAttribute('data-e2e-test-id');window.stream?.getTracks().forEach(track=>track.stop());}
+      else {button.setAttribute('data-e2e-test-id','record_stop_icon');window.requestMic();}
     };
     window.finishRecord=()=>{
       window.stream?.getTracks().forEach(track=>track.stop());

@@ -45,6 +45,9 @@
         android:theme="@style/Theme.TingwuMobile"
         android:usesCleartextTraffic="false">
 
+        <meta-data android:name="com.xiaomi.xms.APP_ID" android:value="${xiaomiXmsAppId}" />
+        <meta-data android:name="com.xiaomi.xms.BUILD_TYPE_DEBUG" android:value="${xiaomiXmsDebug}" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

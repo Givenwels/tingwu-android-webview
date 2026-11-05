@@ -10,10 +10,13 @@ android {
         applicationId = "com.tingwu.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "1.0.16"
+        versionCode = 18
+        versionName = "1.0.17"
 
         buildConfigField("String", "TINGWU_URL", "\"https://tingwu.aliyun.com/\"")
+        manifestPlaceholders["xiaomiXmsAppId"] = providers.gradleProperty("tingwuXiaomiAppId")
+            .orElse(providers.environmentVariable("TINGWU_XIAOMI_APP_ID")).orElse("").get()
+        manifestPlaceholders["xiaomiXmsDebug"] = "false"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -34,6 +37,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            manifestPlaceholders["xiaomiXmsDebug"] = "true"
         }
         release {
             isDebuggable = false

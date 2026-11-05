@@ -47,6 +47,7 @@ class RecordingActivity : AppCompatActivity() {
     private var enteredRecording = false
     private var capturing = false
     private var recordingProtected = false
+    private var pendingRecordingAction: String? = null
     private val notificationLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
     private val script by lazy {
@@ -91,6 +92,8 @@ class RecordingActivity : AppCompatActivity() {
             override fun handleOnBackPressed() = requestBack()
         })
         configureWebView()
+        // Only onNewIntent can control an existing live web session. A cold-start notification
+        // must not apply its old command to a newly created recording later in this Activity.
         loadWorkspace()
     }
 
@@ -203,6 +206,17 @@ class RecordingActivity : AppCompatActivity() {
                 updateRecordingProtection(capturing && message.optBoolean("recording", false))
                 if (!capturing) completeIfReturned(binding.recordingWebView.url.orEmpty())
             }
+            "recording-state" -> {
+                val status = message.optString("status")
+                if (status !in setOf("recording", "paused", "stopped")) return
+                RecordingForegroundService.update(this, RecordingInfo(
+                    status = status,
+                    title = message.optString("title").take(150),
+                    elapsedMs = message.optLong("elapsedMs").coerceIn(0, 6 * 60 * 60 * 1000L),
+                    networkUnstable = message.optBoolean("networkUnstable", false),
+                ))
+                consumeRecordingAction()
+            }
             "completed" -> if (!capturing) {
                 setResult(RESULT_OK)
                 finish()
@@ -215,7 +229,7 @@ class RecordingActivity : AppCompatActivity() {
 
     private fun updateRecordingProtection(recording: Boolean) {
         if (!recording) {
-            if (recordingProtected) RecordingForegroundService.stop(this)
+            if (recordingProtected) RecordingForegroundService.pause(this)
             recordingProtected = false
             return
         }
@@ -243,6 +257,32 @@ class RecordingActivity : AppCompatActivity() {
         recordingProtected = false
         if (!isFinishing && !isDestroyed) {
             Toast.makeText(this, R.string.recording_background_unavailable, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    internal fun onRecordingCommand(command: String) {
+        if (isFinishing || isDestroyed || !UrlPolicy.isTrustedRecordingOrigin(binding.recordingWebView.url.orEmpty())) return
+        if (command !in setOf("pause-recording", "resume-recording")) return
+        if (channel != null) channel?.postMessage(WebMessage(command))
+        else binding.recordingWebView.evaluateJavascript(
+            "window.postMessage(${JSONObject.quote(command)}, location.origin);", null,
+        )
+    }
+
+    private fun consumeRecordingAction() {
+        val action = pendingRecordingAction ?: return
+        if (!pageReady || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        pendingRecordingAction = null
+        if (action == RecordingForegroundService.ACTION_STOP_CONFIRM) requestBack()
+        else onRecordingCommand("resume-recording")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == RecordingForegroundService.ACTION_RESUME || intent.action == RecordingForegroundService.ACTION_STOP_CONFIRM) {
+            pendingRecordingAction = intent.action
+            binding.recordingWebView.post { consumeRecordingAction() }
         }
     }
 
@@ -322,6 +362,7 @@ class RecordingActivity : AppCompatActivity() {
         super.onResume()
         binding.recordingWebView.onResume()
         channel?.postMessage(WebMessage("query-state"))
+        binding.recordingWebView.post { consumeRecordingAction() }
     }
 
     override fun onPause() {
@@ -360,7 +401,8 @@ class RecordingActivity : AppCompatActivity() {
             pendingMicrophone?.deny()
             pendingMicrophone = null
             capturing = false
-            updateRecordingProtection(false)
+            RecordingForegroundService.stop(this@RecordingActivity)
+            recordingProtected = false
             view.keepScreenOn = false
             showLoading()
         }

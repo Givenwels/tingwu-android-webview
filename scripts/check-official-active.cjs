@@ -33,7 +33,17 @@ const { chromium } = require('playwright-core');
       const DOM = require('sCiz');
       const Root = require('FJt9').a;
       const HeaderFrame = require('+vzo').__phoneHeader;
-      const Header = require('ytgv').b;
+      // Supply only local document context; keep the real editable input and blur/Enter handlers.
+      const titleContext = { i: { useDocumentData: () => ({ documentData: { docId: 'local-layout-test', docScene: 'record' } }) },
+        a: { useDocBaseData: () => ({ docBaseData: null }) }, k: { transShare: 'share', discoveryShare: 'discoveryShare' } };
+      const localModule = (id, overrides) => {
+        const localRequire = name => Object.prototype.hasOwnProperty.call(overrides, name) ? overrides[name] : require(name);
+        Object.assign(localRequire, require);
+        const module = { exports: {} };
+        require.m[id](module, module.exports, localRequire);
+        return module.exports;
+      };
+      const Header = localModule('ytgv', { CdJi: localModule('CdJi', { YHr9: titleContext }) }).b;
       const Controls = require('+vzo').__phoneControls;
       const recoil = Object.values(require.c).map(module => module.exports).find(value => value && value.RecoilRoot);
       if (!recoil) throw new Error('The official layout state provider is unavailable');
@@ -43,10 +53,17 @@ const { chromium } = require('playwright-core');
       window.messages = [];
       window.TingwuRecorder = { postMessage: value => window.messages.push(JSON.parse(value)) };
       window.recordingState = 'running';
+      window.recordingTitle = '2026-11-05 会议记录';
+      window.savedTitles = [];
       const h = React.createElement;
       const setState = state => { window.recordingState = state; window.renderActiveRecorder(); };
       window.renderActiveRecorder = () => DOM.render(h(recoil.RecoilRoot, null, h(Root, null,
-        h(HeaderFrame, null, h(Header, { transId: 'local-layout-test', meetingName: '2026-11-01 会议记录', readonly: true })),
+        h(HeaderFrame, null, h(Header, { transId: 'local-layout-test', meetingName: window.recordingTitle,
+          isMiniWindowRecording: true, saveMessage: '已保存', onTitleChange: title => {
+            window.savedTitles.push(title);
+            window.recordingTitle = title;
+            window.renderActiveRecorder();
+          } })),
         h('div', { className: 'leftContain' }),
         h('div', { className: 'content' },
           h('div', { className: 'left-area' },
@@ -74,6 +91,20 @@ const { chromium } = require('playwright-core');
       .local-note-body{flex:1;padding:16px}.local-note-footer{padding:8px;text-align:center;color:#aaa;border-top:1px solid #eee}` });
     await page.addScriptTag({ content: readFileSync(join(__dirname, '../app/src/main/assets/recorder-mobile.js'), 'utf8') });
     await page.waitForFunction(() => document.querySelector('.tingwu-mobile-recording'));
+    const title = page.locator('input#record_title');
+    await title.waitFor({ state: 'attached' });
+    const titleBox = await title.boundingBox();
+    if (process.env.TINGWU_OFFICIAL_TITLE_SCREENSHOT) {
+      await page.screenshot({ path: process.env.TINGWU_OFFICIAL_TITLE_SCREENSHOT, fullPage: true });
+    }
+    assert.ok(titleBox && titleBox.width >= 250 && titleBox.height >= 44,
+      `The real editable recording title collapsed: ${JSON.stringify(titleBox)}`);
+    assert.ok((await page.locator('.titleContain').boundingBox()).y >= 12, 'The desktop header height clips the title label');
+    await title.fill('手机上的会议标题');
+    await title.press('Enter');
+    await page.waitForFunction(() => window.savedTitles.includes('手机上的会议标题'));
+    await page.evaluate(() => window.renderActiveRecorder());
+    assert.equal(await title.inputValue(), '手机上的会议标题');
     const overflow = await page.evaluate(() => ({ body: getComputedStyle(document.body).overflowY,
       html: getComputedStyle(document.documentElement).overflowY }));
     assert.ok(!['hidden', 'clip'].includes(overflow.body) && !['hidden', 'clip'].includes(overflow.html),
@@ -85,7 +116,7 @@ const { chromium } = require('playwright-core');
         const metrics = await page.evaluate(() => {
           const rect = selector => { const r = document.querySelector(selector).getBoundingClientRect();
             return { x:r.x, right:r.right, y:r.y, bottom:r.bottom, height:r.height }; };
-          return { title:rect('.meeting-title'), toolbar:rect('.top'), text:rect('.summary-container'),
+          return { title:rect('input#record_title'), toolbar:rect('.top'), text:rect('.summary-container'),
             transcript:rect('.summary-area'), controls:rect('.bottomContain'), notes:rect('.rightArea'),
             stop:rect('.stop-btn'), pause:rect('.play-btn') };
         });

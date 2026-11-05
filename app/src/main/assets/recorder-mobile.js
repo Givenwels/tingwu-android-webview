@@ -11,6 +11,9 @@
   let menuOpened = false;
   let recordClicked = false;
   let scheduled = false;
+  let sessionStarted = false;
+  let lastRecordingState = null;
+  let networkUnstable = false;
   const audioTracks = new Set();
 
   const send = message => {
@@ -36,6 +39,30 @@
       recordingActive = recording;
       send({ type: 'capture', active, recording });
       schedule();
+    }
+  };
+  const reportRecording = (force = false) => {
+    const inRecord = /\/doc\/(?:edit\/)?record\/?$/.test(location.pathname);
+    const finish = inRecord && findVisible('[data-e2e-test-id="record_finish_icon"], .bottomContain .stop-btn');
+    if (finish && recordingActive) sessionStarted = true;
+    if (!sessionStarted) return;
+    const status = !finish ? 'stopped' : recordingActive ? 'recording' : 'paused';
+    const title = document.querySelector('input#record_title, .meeting-title');
+    const elapsed = document.querySelector('.bottomContain .running-time');
+    const parts = ((elapsed && elapsed.textContent.split('/')[0].trim()) || '').split(':');
+    const elapsedMs = parts.length >= 2 && parts.length <= 3 && parts.every(part => /^\d+$/.test(part)) ?
+      parts.reduce((seconds, part) => seconds * 60 + Number(part), 0) * 1000 : (lastRecordingState ? lastRecordingState.elapsedMs : 0);
+    document.querySelectorAll('.ant-message-notice-content').forEach(notice => {
+      if (/网络连接不稳定.*音频持续录制/.test(notice.textContent)) networkUnstable = true;
+      else if (/网络已恢复/.test(notice.textContent)) networkUnstable = false;
+    });
+    const next = { type: 'recording-state', status,
+      title: title ? String(title.value || title.textContent || '').trim().slice(0, 150) : (lastRecordingState ? lastRecordingState.title : ''),
+      elapsedMs, networkUnstable };
+    if (force || !lastRecordingState || next.status !== lastRecordingState.status || next.title !== lastRecordingState.title ||
+        next.networkUnstable !== lastRecordingState.networkUnstable || Math.abs(next.elapsedMs - lastRecordingState.elapsedMs) >= 15000) {
+      lastRecordingState = next;
+      send(next);
     }
   };
   const mediaDevices = navigator.mediaDevices;
@@ -65,7 +92,7 @@
     html:not([data-tingwu-recorder-stage="recording"]) #root { opacity:0!important; pointer-events:none!important; }
     [data-tingwu-recorder-hidden] { display:none!important; }
     .tingwu-recorder-shell { width:100%!important; min-width:0!important; height:auto!important; min-height:100vh; overflow:visible!important; display:block!important; }
-    .tingwu-mobile-recording { width:100%!important; min-width:0!important; min-height:100vh!important; height:auto!important; position:relative!important; display:flex!important; flex-direction:column!important; margin:0!important; overflow:visible!important; box-sizing:border-box; background:#f7f7ff!important; }
+    .tingwu-mobile-recording { width:100%!important; min-width:0!important; min-height:100vh!important; height:auto!important; position:relative!important; display:flex!important; flex-direction:column!important; margin:0!important; overflow:visible!important; box-sizing:border-box; background:#f7f7ff!important; font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif; }
     .tingwu-mobile-recording * { min-width:0!important; max-width:100%!important; box-sizing:border-box; }
     .tingwu-mobile-recording > .content { display:flex!important; flex-direction:column!important; width:100%!important; min-width:0!important; height:auto!important; min-height:calc(100vh - 64px)!important; margin:0!important; padding:0 12px 20px!important; flex:none!important; position:relative!important; inset:auto!important; gap:12px; }
     .tingwu-mobile-recording > .content > * { width:100%!important; min-width:0!important; max-width:100%!important; flex:none!important; }
@@ -73,6 +100,7 @@
     .tingwu-mobile-recording > .content > .left-area { height:auto!important; display:flex!important; flex-direction:column!important; position:relative!important; inset:auto!important; margin:0!important; gap:12px; }
     .tingwu-mobile-recording .leftContain,.tingwu-mobile-recording .backBox,.tingwu-mobile-recording .bottombg,.tingwu-mobile-recording .rightbg,.tingwu-mobile-recording .iconArrowGray { display:none!important; }
     [data-tingwu-recorder-topbar] { width:100%!important; min-width:0!important; height:auto!important; flex:none!important; }
+    [data-tingwu-recorder-header-frame] { display:block!important; width:100%!important; min-width:0!important; min-height:0!important; height:auto!important; position:relative!important; inset:auto!important; margin:0!important; padding:0!important; }
     .tingwu-mobile-recording .center-area { min-width:0!important; height:auto!important; flex-wrap:wrap; }
     .tingwu-mobile-recording .viewport { width:100%!important; min-width:0!important; height:auto!important; padding:16px!important; display:block!important; }
     .tingwu-mobile-recording .viewport > .left-area { width:100%!important; height:auto!important; display:block!important; }
@@ -80,6 +108,13 @@
     .tingwu-mobile-recording .meeting-title-shell { width:100%!important; min-height:28px; }
     .tingwu-mobile-recording .save-message { position:static!important; inset:auto!important; margin:0!important; line-height:20px!important; }
     .tingwu-mobile-recording .meeting-title { font-size:18px!important; max-width:calc(100vw - 56px)!important; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    [data-tingwu-recorder-title-frame] { display:block!important; width:100%!important; min-width:0!important; height:auto!important; flex:none!important; position:relative!important; margin:0!important; }
+    [data-tingwu-recorder-title-field] { width:100%!important; height:48px!important; border:1px solid #deddf0!important; border-radius:12px!important; background:#fff!important; }
+    [data-tingwu-recorder-title-field]:focus-within { border-color:#605ce5!important; box-shadow:0 0 0 2px #605ce51a; }
+    .tingwu-mobile-recording input#record_title { display:block!important; width:100%!important; min-width:0!important; max-width:100%!important; height:46px!important; font:600 18px/26px system-ui,sans-serif!important; padding:10px 12px!important; margin:0!important; border:0!important; text-overflow:ellipsis; }
+    [data-tingwu-recorder-editable-title]::before { content:'录音标题 · 点击修改'; display:block; font-size:12px; line-height:20px; color:#77758d; margin-bottom:4px; }
+    .tingwu-mobile-recording .FileTitle--Bottom { padding:4px 0 0!important; min-height:20px; }
+    .tingwu-mobile-recording .saveText { font-size:12px!important; line-height:20px!important; }
     .tingwu-mobile-recording .summary-area { width:100%!important; min-width:0!important; min-height:0!important; height:auto!important; flex:none!important; display:flex!important; flex-direction:column!important; gap:12px; margin:0!important; padding:16px!important; border-radius:20px!important; background:#fff!important; }
     .tingwu-mobile-recording .summary-area > .top { position:relative!important; inset:auto!important; width:100%!important; height:auto!important; min-height:44px; display:flex!important; flex-wrap:wrap; align-items:center; gap:8px; margin:0!important; padding:0!important; }
     .tingwu-mobile-recording .top > .top-button { flex:0 0 44px!important; width:44px!important; height:44px!important; margin:0!important; float:none!important; }
@@ -87,6 +122,8 @@
     .tingwu-mobile-recording .summary-container { width:100%!important; min-width:0!important; max-width:none!important; height:280px!important; height:clamp(240px,40vh,420px)!important; min-height:240px!important; max-height:none!important; flex:none!important; display:flex!important; flex-direction:column!important; overflow:hidden!important; margin:0!important; font-size:16px; line-height:1.8; word-break:break-word; overflow-wrap:anywhere; }
     .tingwu-mobile-recording .summary-container > * { width:100%!important; height:100%!important; min-height:0!important; flex:1!important; overflow:auto!important; }
     .tingwu-mobile-recording .summary-container .container { width:100%!important; padding:0 4px!important; }
+    .tingwu-mobile-recording .summary-container [data-tingwu-recorder-transcript-frame],.tingwu-mobile-recording .summary-container [data-tingwu-recorder-transcript-container] { height:100%!important; min-height:0!important; overflow:hidden!important; }
+    [data-tingwu-recorder-transcript-editor] { width:100%!important; height:100%!important; min-height:0!important; max-height:100%!important; margin:0!important; }
     .tingwu-mobile-recording .rightArea,.tingwu-mobile-recording .rightAreaDragon { width:100%!important; min-width:0!important; flex:none!important; height:320px!important; position:relative!important; inset:auto!important; transform:none!important; margin:0!important; padding:0!important; border-radius:20px; overflow:hidden; }
     .tingwu-mobile-recording .rightArea > *,.tingwu-mobile-recording .rightAreaDragon > * { width:100%!important; height:100%!important; min-height:0!important; }
     .tingwu-mobile-recording .rightArea iframe { width:100%!important; height:100%!important; border:0; }
@@ -165,9 +202,39 @@
       }
       node = node.parentElement;
     }
-    let topbar = root.querySelector('.meeting-title');
+    const title = root.querySelector('input#record_title');
+    if (title) {
+      title.setAttribute('aria-label', '录音标题');
+      title.setAttribute('enterkeyhint', 'done');
+      title.parentElement.setAttribute('data-tingwu-recorder-title-field', '');
+      let frame = title.parentElement.parentElement;
+      while (frame && !frame.classList.contains('titleContain') && !frame.classList.contains('titleContainBig') && frame !== root) {
+        frame.setAttribute('data-tingwu-recorder-title-frame', '');
+        frame = frame.parentElement;
+      }
+      if (frame && frame !== root) frame.setAttribute('data-tingwu-recorder-editable-title', '');
+    }
+    let topbar = title || root.querySelector('.meeting-title');
     while (topbar && topbar.parentElement && topbar.parentElement !== root) topbar = topbar.parentElement;
     if (topbar) topbar.setAttribute('data-tingwu-recorder-topbar', '');
+    const viewport = root.querySelector('.viewport');
+    if (viewport) {
+      let frame = viewport.parentElement;
+      while (frame && frame !== root) {
+        frame.setAttribute('data-tingwu-recorder-header-frame', '');
+        frame = frame.parentElement;
+      }
+    }
+    const transcriptContainer = root.querySelector('.summary-container .container');
+    if (transcriptContainer && transcriptContainer.firstElementChild && transcriptContainer.firstElementChild.tagName === 'DIV') {
+      transcriptContainer.setAttribute('data-tingwu-recorder-transcript-container', '');
+      transcriptContainer.firstElementChild.setAttribute('data-tingwu-recorder-transcript-editor', '');
+      let frame = transcriptContainer.parentElement;
+      while (frame && !frame.classList.contains('summary-container') && frame !== root) {
+        frame.setAttribute('data-tingwu-recorder-transcript-frame', '');
+        frame = frame.parentElement;
+      }
+    }
     const controls = root.querySelector('.bottomContain');
     if (controls && controls.parentElement && !controls.parentElement.classList.contains('left-area')) {
       controls.parentElement.setAttribute('data-tingwu-recorder-controls', '');
@@ -200,6 +267,7 @@
     applyLayout();
     if (!document.documentElement) return;
     reportCapture();
+    reportRecording();
     const root = recordingRoot();
     if (root && /\/doc\/(?:edit\/)?record\/?$/.test(location.pathname)) {
       exposeRecording(root);
@@ -247,16 +315,32 @@
       else send({ type: 'back-unavailable' });
     }
   };
+  const recordingCommand = command => {
+    if (command === 'pause-recording') {
+      const pause = findVisible('.bottomContain a[data-e2e-test-id="record_stop_icon"]');
+      if (pause) pause.click();
+      return true;
+    }
+    if (command === 'resume-recording') {
+      const resume = findVisible('.bottomContain a.play-btn:not([data-e2e-test-id="record_stop_icon"])');
+      if (resume && sessionStarted) resume.click();
+      return true;
+    }
+    return false;
+  };
   window.addEventListener('message', event => {
+    if (event.source === window && event.origin === location.origin && recordingCommand(event.data)) return;
     if (event.data === 'tingwu-recorder-exit') { requestExit(); return; }
     if (event.data !== 'tingwu-recorder' || !event.ports || !event.ports[0]) return;
     if (port) port.close();
     port = event.ports[0];
     port.onmessage = message => {
+      if (recordingCommand(message.data)) return;
       if (message.data === 'request-exit') requestExit();
       if (message.data === 'query-state') {
         if (lastReady) send(lastReady);
         send({ type: 'capture', active: captureActive, recording: recordingActive });
+        reportRecording(true);
         schedule();
       }
     };
@@ -265,10 +349,12 @@
     schedule();
   });
   window.addEventListener('popstate', schedule);
+  document.addEventListener('change', schedule);
+  document.addEventListener('focusout', schedule);
   window.addEventListener('pagehide', () => {
     audioTracks.forEach(track => track.stop());
     send({ type: 'capture', active: false, recording: false });
   });
-  new MutationObserver(schedule).observe(document, { childList: true, subtree: true });
+  new MutationObserver(schedule).observe(document, { childList: true, characterData: true, subtree: true });
   schedule();
 })();
